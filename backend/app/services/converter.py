@@ -71,7 +71,8 @@ class Converter:
             author=novel.author or "未知",
             chapter_texts=chapter_texts,
         )
-        raw = self.ai.chat(PRE_SCAN_SYSTEM_PROMPT, user_msg, temperature=0.1, max_tokens=2048)
+        raw = self.ai.chat(PRE_SCAN_SYSTEM_PROMPT, user_msg, temperature=0.1,
+                           max_tokens=settings.pre_scan_max_tokens)
         if not raw:
             return False
 
@@ -96,7 +97,8 @@ class Converter:
         summary_ctx = self.context.get_summary_context(chapter.index)
 
         user_prompt = build_chapter_prompt(chapter.index, chapter.text, char_ctx, summary_ctx)
-        raw = self.ai.chat(SYSTEM_PROMPT, user_prompt, temperature=0.3, max_tokens=4096)
+        raw = self.ai.chat(SYSTEM_PROMPT, user_prompt, temperature=0.3,
+                           max_tokens=settings.chapter_max_tokens)
         if not raw:
             return None
 

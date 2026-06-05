@@ -40,7 +40,7 @@
 │   ├── tests/
 │   │   ├── test_parser.py
 │   │   ├── test_assembler.py
-│   │   └── fixtures/              # 示例小说文本（3 章）
+│   │   └── fixtures/              # 示例小说文本
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
@@ -105,7 +105,7 @@ npm run dev
 
 1. 在浏览器中打开 http://localhost:5173
 2. 点击「开始转换」
-3. 粘贴 1 章以上的小说文本（或上传 .txt 文件）
+3. 粘贴小说文本，至少 1 章（或上传 .txt 文件）
 4. 点击「开始转换」按钮
 5. 等待 AI 逐章处理（每章约 5-15 秒）
 6. 查看生成的剧本，审阅连续性警告
@@ -116,8 +116,7 @@ npm run dev
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/chapters/parse` | 本地分割章节（不调用 API）|
-| POST | `/api/convert` | 完整转换管线（JSON 输出）|
-| POST | `/api/convert/yaml` | 完整转换管线（YAML 文件下载）|
+| POST | `/api/convert` | 完整转换管线（Pre-scan → 逐章转换 → Assembler）|
 | GET  | `/api/schema` | 返回 YAML Schema 定义 |
 
 ## YAML Schema
