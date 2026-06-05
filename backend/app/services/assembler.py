@@ -80,14 +80,17 @@ class Assembler:
                 all_entries.append(pc)
 
         # Step 1: Exact name match
+        # Track a counter for generating unique IDs for entries without one
+        id_counter = 1
         for entry in all_entries:
             name = entry.get("name", "")
             if not name:
                 continue
             if name in merged:
-                self._merge_fields(merged[name], _to_char_ref(entry))
+                self._merge_fields(merged[name], _to_char_ref(entry, id_counter))
             else:
-                merged[name] = _to_char_ref(entry)
+                merged[name] = _to_char_ref(entry, id_counter)
+                id_counter += 1
 
         # Step 2: Alias match
         alias_map = {}
@@ -104,7 +107,8 @@ class Assembler:
                     # Check if this name is an alias of an existing character
                     if name in alias_map:
                         target = alias_map[name]
-                        self._merge_fields(merged[target], _to_char_ref(entry))
+                        self._merge_fields(merged[target], _to_char_ref(entry, id_counter))
+                        id_counter += 1
                         # Add the name as an alias
                         if name not in merged[target].aliases:
                             merged[target].aliases.append(name)
@@ -209,7 +213,7 @@ class Assembler:
                     warnings.append(ContinuityWarning(
                         level="warning",
                         type="orphan_character",
-                        message=f"角色 {block.character_id} 在场景 {scene.heading} 中出现，但未在角色表中定义"
+                        message=f"角色 {block.character_id} 在场景 {scene.heading} 中出现，但未在角色表中定义",
                         locations=[scene.id],
                     ))
         return warnings
@@ -224,7 +228,7 @@ class Assembler:
                     warnings.append(ContinuityWarning(
                         level="warning",
                         type="inconsistent_location",
-                        message=f"场景「{loc}」在前的内外景标志不一致（之前：{'内景' if location_interiors[loc] else '外景'}，本场：{'内景' if scene.interior else '外景'}）"
+                        message=f"场景「{loc}」在前的内外景标志不一致（之前：{'内景' if location_interiors[loc] else '外景'}，本场：{'内景' if scene.interior else '外景'}）",
                         locations=[scene.id],
                     ))
             else:
@@ -280,9 +284,13 @@ class Assembler:
         return warnings
 
 
-def _to_char_ref(d: dict) -> CharacterRef:
+def _to_char_ref(d: dict, default_id_suffix: int = 0) -> CharacterRef:
+    """Convert a dict to CharacterRef. If default_id_suffix is provided, generate a unique ID."""
+    char_id = d.get("id")
+    if not char_id:
+        char_id = f"char_{default_id_suffix:03d}" if default_id_suffix else "char_999"
     return CharacterRef(
-        id=d.get("id", "char_999"),
+        id=char_id,
         name=d.get("name", "未知"),
         aliases=d.get("aliases") or [],
         role=d.get("role"),

@@ -116,7 +116,8 @@ npm run dev
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/chapters/parse` | 本地分割章节（不调用 API）|
-| POST | `/api/convert` | 完整转换管线（Pre-scan → 逐章转换 → Assembler）|
+| POST | `/api/convert` | 完整转换管线（JSON 输出）|
+| POST | `/api/convert/yaml` | 完整转换管线（YAML 文件下载）|
 | GET  | `/api/schema` | 返回 YAML Schema 定义 |
 
 ## YAML Schema
