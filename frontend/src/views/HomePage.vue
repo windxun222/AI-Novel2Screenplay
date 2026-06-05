@@ -43,7 +43,7 @@
           <span class="step-num">1</span>
           <div>
             <strong>粘贴或上传</strong>
-            <p>将你的小说文本（3 章以上）粘贴到输入框，或上传 .txt 文件。</p>
+            <p>将你的小说文本（1 章以上）粘贴到输入框，或上传 .txt 文件。</p>
           </div>
         </div>
         <div class="step">

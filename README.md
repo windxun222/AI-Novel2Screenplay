@@ -4,7 +4,7 @@
 
 ## 功能
 
-- **多章处理**：支持 3 章以上的小说文本，按章节逐章调用 DeepSeek API 转换
+- **多章处理**：支持 1 章以上的小说文本，按章节逐章调用 DeepSeek API 转换
 - **上下文衔接**：Pre-scan 预扫描角色 + 前情概要注入，确保跨章节连续性
 - **中文剧本规范**：输出符合中文影视行业通用格式的结构化剧本
 - **连续性校验**：自动检测角色命名冲突、场景逻辑矛盾，输出警告
@@ -105,7 +105,7 @@ npm run dev
 
 1. 在浏览器中打开 http://localhost:5173
 2. 点击「开始转换」
-3. 粘贴 3 章以上的小说文本（或上传 .txt 文件）
+3. 粘贴 1 章以上的小说文本（或上传 .txt 文件）
 4. 点击「开始转换」按钮
 5. 等待 AI 逐章处理（每章约 5-15 秒）
 6. 查看生成的剧本，审阅连续性警告
@@ -116,7 +116,8 @@ npm run dev
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | `/api/chapters/parse` | 本地分割章节（不调用 API）|
-| POST | `/api/convert` | 完整转换管线（Pre-scan → 逐章转换 → Assembler）|
+| POST | `/api/convert` | 完整转换管线（JSON 输出）|
+| POST | `/api/convert/yaml` | 完整转换管线（YAML 文件下载）|
 | GET  | `/api/schema` | 返回 YAML Schema 定义 |
 
 ## YAML Schema
@@ -126,7 +127,7 @@ npm run dev
 ## 转换管线
 
 ```
-用户输入 (3章+)
+用户输入 (1章+)
     │
     ▼
 Phase 0: Pre-scan (DeepSeek 轻量调用)

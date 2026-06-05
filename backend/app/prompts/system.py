@@ -33,7 +33,7 @@ def build_chapter_prompt(chapter_index, chapter_text, character_context, previou
     parts.append("## 前情进展")
     parts.append(previous_summaries or "（本剧第一章）")
     parts.append("")
-    parts.append("## 第%d章原文" % chapter_index)
+    parts.append(f"## 第{chapter_index}章原文")
     parts.append(chapter_text)
     parts.append("")
     parts.append("## 输出")

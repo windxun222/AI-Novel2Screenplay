@@ -62,7 +62,7 @@ async function handleSubmit(data) {
       author: data.author || "",
       chapters: (parsed.chapters || []).map((ch, i) => ({
         index: ch.index || i + 1,
-        title: ch.title || "第%d章" % (i + 1),
+        title: ch.title || `第${i + 1}章`,
         text: ch.text || data.text,
       })),
     };

@@ -27,7 +27,7 @@ class Assembler:
         # Re-number scenes sequentially
         for i, scene in enumerate(all_scenes, 1):
             scene.number = i
-            scene.id = "scene_%03d" % i
+            scene.id = f"scene_{i:03d}"
 
         # Continuity checks
         for w in self._check_orphan_characters(all_scenes, all_characters):
@@ -80,14 +80,17 @@ class Assembler:
                 all_entries.append(pc)
 
         # Step 1: Exact name match
+        # Track a counter for generating unique IDs for entries without one
+        id_counter = 1
         for entry in all_entries:
             name = entry.get("name", "")
             if not name:
                 continue
             if name in merged:
-                self._merge_fields(merged[name], _to_char_ref(entry))
+                self._merge_fields(merged[name], _to_char_ref(entry, id_counter))
             else:
-                merged[name] = _to_char_ref(entry)
+                merged[name] = _to_char_ref(entry, id_counter)
+                id_counter += 1
 
         # Step 2: Alias match
         alias_map = {}
@@ -104,7 +107,8 @@ class Assembler:
                     # Check if this name is an alias of an existing character
                     if name in alias_map:
                         target = alias_map[name]
-                        self._merge_fields(merged[target], _to_char_ref(entry))
+                        self._merge_fields(merged[target], _to_char_ref(entry, id_counter))
+                        id_counter += 1
                         # Add the name as an alias
                         if name not in merged[target].aliases:
                             merged[target].aliases.append(name)
@@ -150,7 +154,7 @@ class Assembler:
                     interior = interior.lower() in ("true", "是", "内", "内景")
 
                 scene = Scene(
-                    id="scene_tmp_%d_%d" % (chapter_index, i),
+                    id=f"scene_tmp_{chapter_index}_{i}",
                     number=i,
                     heading=heading,
                     location=location or heading.replace("【内】", "").replace("【外】", "").split("·")[0].strip(),
@@ -184,16 +188,16 @@ class Assembler:
             ch_scenes = [s for s in scenes if s.chapter_index == ch.index]
             if ch_scenes:
                 acts.append(Act(
-                    id="act_%d" % ch.index,
-                    title="第%d章" % ch.index,
-                    summary=ch.title or "第%d章" % ch.index,
+                    id=f"act_{ch.index}",
+                    title=f"第{ch.index}章",
+                    summary=ch.title or f"第{ch.index}章",
                     scenes=ch_scenes,
                 ))
             else:
                 acts.append(Act(
-                    id="act_%d" % ch.index,
-                    title="第%d章" % ch.index,
-                    summary="第%d章" % ch.index,
+                    id=f"act_{ch.index}",
+                    title=f"第{ch.index}章",
+                    summary=f"第{ch.index}章",
                 ))
         return acts
 
@@ -209,8 +213,7 @@ class Assembler:
                     warnings.append(ContinuityWarning(
                         level="warning",
                         type="orphan_character",
-                        message="角色 %s 在场景 %s 中出现，但未在角色表中定义" % (
-                            block.character_id, scene.heading),
+                        message=f"角色 {block.character_id} 在场景 {scene.heading} 中出现，但未在角色表中定义",
                         locations=[scene.id],
                     ))
         return warnings
@@ -225,11 +228,7 @@ class Assembler:
                     warnings.append(ContinuityWarning(
                         level="warning",
                         type="inconsistent_location",
-                        message="场景「%s」在前的内外景标志不一致（之前：%s，本场：%s）" % (
-                            loc,
-                            "内景" if location_interiors[loc] else "外景",
-                            "内景" if scene.interior else "外景",
-                        ),
+                        message=f"场景「{loc}」在前的内外景标志不一致（之前：{'内景' if location_interiors[loc] else '外景'}，本场：{'内景' if scene.interior else '外景'}）",
                         locations=[scene.id],
                     ))
             else:
@@ -246,7 +245,7 @@ class Assembler:
                     warnings.append(ContinuityWarning(
                         level="info",
                         type="missing_transition",
-                        message="场景「%s」与前一场景之间缺少转场标记" % scene.heading,
+                        message=f"场景「{scene.heading}」与前一场景之间缺少转场标记",
                         locations=[scene.id],
                     ))
         return warnings
@@ -279,16 +278,19 @@ class Assembler:
                         warnings.append(ContinuityWarning(
                             level="warning",
                             type="character_description_changed",
-                            message="角色「%s」的性格描述在第%d章和第%d章中存在不一致：\"%s\" vs \"%s\"" % (
-                                name, traits[0][0], ch_idx, first_val, val),
+                            message=f"角色「{name}」的性格描述在第{traits[0][0]}章和第{ch_idx}章中存在不一致：\"{first_val}\" vs \"{val}\"",
                             locations=[],
                         ))
         return warnings
 
 
-def _to_char_ref(d: dict) -> CharacterRef:
+def _to_char_ref(d: dict, default_id_suffix: int = 0) -> CharacterRef:
+    """Convert a dict to CharacterRef. If default_id_suffix is provided, generate a unique ID."""
+    char_id = d.get("id")
+    if not char_id:
+        char_id = f"char_{default_id_suffix:03d}" if default_id_suffix else "char_999"
     return CharacterRef(
-        id=d.get("id", "char_999"),
+        id=char_id,
         name=d.get("name", "未知"),
         aliases=d.get("aliases") or [],
         role=d.get("role"),

@@ -15,6 +15,13 @@
     <main class="app-main">
       <router-view />
     </main>
+    <footer class="app-footer">
+      <div class="footer-content">
+        <span>AI Novel2Screenplay v0.1.0</span>
+        <span>Powered by DeepSeek · Vue 3 · FastAPI</span>
+        <span>MIT License</span>
+      </div>
+    </footer>
   </div>
 </template>
 
@@ -69,6 +76,21 @@
   color: #fff;
 }
 .app-main {
-  min-height: calc(100vh - 56px);
+  min-height: calc(100vh - 56px - 48px);
+}
+.app-footer {
+  background: #1a1a2e;
+  border-top: 1px solid #2a2a4a;
+  padding: 12px 24px;
+}
+.footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  font-size: 12px;
+  color: #5a5a7a;
 }
 </style>

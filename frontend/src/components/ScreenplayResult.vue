@@ -8,7 +8,7 @@
         请检查：
         <br />1. DeepSeek API Key 是否已配置
         <br />2. 网络连接是否正常
-        <br />3. 小说文本是否包含至少 3 章内容
+        <br />3. 小说文本是否包含至少 1 章内容
       </p>
     </div>
 
@@ -129,8 +129,11 @@
       <div class="result-export card">
         <h3 class="section-title">导出</h3>
         <div class="export-actions">
-          <button class="btn btn-primary" @click="copyYAML">
-            {{ copied ? "已复制" : "复制 YAML" }}
+          <button class="btn btn-primary" @click="copyJSON">
+            {{ copied ? "已复制" : "复制 JSON" }}
+          </button>
+          <button class="btn btn-secondary" @click="downloadJSON">
+            下载 JSON 文件
           </button>
           <button class="btn btn-secondary" @click="downloadYAML">
             下载 YAML 文件
@@ -171,10 +174,10 @@ function warnLabel(level) {
   return labels[level] || level;
 }
 
-async function copyYAML() {
+async function copyJSON() {
   try {
-    const yaml = JSON.stringify(props.screenplay, null, 2);
-    await navigator.clipboard.writeText(yaml);
+    const json = JSON.stringify(props.screenplay, null, 2);
+    await navigator.clipboard.writeText(json);
     copied.value = true;
     setTimeout(() => (copied.value = false), 2000);
   } catch {
@@ -182,17 +185,110 @@ async function copyYAML() {
   }
 }
 
-function downloadYAML() {
-  const yaml = JSON.stringify(props.screenplay, null, 2);
-  const blob = new Blob([yaml], { type: "text/yaml;charset=utf-8" });
+function downloadJSON() {
+  const json = JSON.stringify(props.screenplay, null, 2);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = (props.screenplay?.metadata?.title || "screenplay") + ".yaml";
+  a.download = (props.screenplay?.metadata?.title || "screenplay") + ".json";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+async function downloadYAML() {
+  try {
+    // Build YAML payload from the existing screenplay data directly,
+    // avoiding a second full API conversion
+    const screenplay = props.screenplay;
+    if (!screenplay) return;
+
+    // Simple YAML serializer for the screenplay structure
+    const lines = [];
+    const indent = (n, s) => "  ".repeat(n) + s;
+
+    lines.push("screenplay:");
+    // metadata
+    if (screenplay.metadata) {
+      lines.push(indent(1, "metadata:"));
+      const m = screenplay.metadata;
+      lines.push(indent(2, `title: ${m.title || ""}`));
+      if (m.source) lines.push(indent(2, `source: ${m.source}`));
+      if (m.author) lines.push(indent(2, `author: ${m.author}`));
+      lines.push(indent(2, `adapter: ${m.adapter || "AI Novel2Screenplay"}`));
+      lines.push(indent(2, `created_at: ${m.created_at || ""}`));
+      lines.push(indent(2, `chapter_count: ${m.chapter_count || 0}`));
+      lines.push(indent(2, `version: ${m.version || "1.0"}`));
+    }
+
+    // characters
+    lines.push(indent(1, "characters:"));
+    for (const c of (screenplay.characters || [])) {
+      lines.push(indent(2, `- id: ${c.id}`));
+      lines.push(indent(3, `name: ${c.name}`));
+      if (c.aliases?.length) lines.push(indent(3, `aliases: [${c.aliases.join(", ")}]`));
+      if (c.role) lines.push(indent(3, `role: ${c.role}`));
+      if (c.gender) lines.push(indent(3, `gender: ${c.gender}`));
+      if (c.age) lines.push(indent(3, `age: ${c.age}`));
+      if (c.personality) lines.push(indent(3, `personality: ${c.personality}`));
+      if (c.background) lines.push(indent(3, `background: ${c.background}`));
+      if (c.notes) lines.push(indent(3, `notes: ${c.notes}`));
+    }
+
+    // acts
+    lines.push(indent(1, "acts:"));
+    for (const act of (screenplay.acts || [])) {
+      lines.push(indent(2, `- id: ${act.id}`));
+      if (act.title) lines.push(indent(3, `title: ${act.title}`));
+      if (act.summary) lines.push(indent(3, `summary: ${act.summary}`));
+      lines.push(indent(3, "scenes:"));
+      for (const scene of (act.scenes || [])) {
+        lines.push(indent(4, `- id: ${scene.id}`));
+        lines.push(indent(5, `number: ${scene.number}`));
+        lines.push(indent(5, `heading: ${JSON.stringify(scene.heading)}`));
+        lines.push(indent(5, `location: ${JSON.stringify(scene.location)}`));
+        lines.push(indent(5, `time: ${scene.time}`));
+        lines.push(indent(5, `interior: ${scene.interior}`));
+        if (scene.summary) lines.push(indent(5, `summary: ${JSON.stringify(scene.summary)}`));
+        lines.push(indent(5, `chapter_index: ${scene.chapter_index}`));
+        lines.push(indent(5, "content:"));
+        for (const block of (scene.content || [])) {
+          lines.push(indent(6, `- type: ${block.type}`));
+          if (block.description) lines.push(indent(7, `description: ${JSON.stringify(block.description)}`));
+          if (block.character_id) lines.push(indent(7, `character_id: ${block.character_id}`));
+          if (block.line) lines.push(indent(7, `line: ${JSON.stringify(block.line)}`));
+          if (block.delivery) lines.push(indent(7, `delivery: ${JSON.stringify(block.delivery)}`));
+          if (block.transition_type) lines.push(indent(7, `transition_type: ${block.transition_type}`));
+        }
+      }
+    }
+
+    // warnings
+    if (screenplay.warnings?.length) {
+      lines.push(indent(1, "warnings:"));
+      for (const w of screenplay.warnings) {
+        lines.push(indent(2, `- level: ${w.level}`));
+        lines.push(indent(3, `type: ${w.type}`));
+        lines.push(indent(3, `message: ${JSON.stringify(w.message)}`));
+        if (w.locations?.length) lines.push(indent(3, `locations: [${w.locations.join(", ")}]`));
+      }
+    }
+
+    const yamlContent = lines.join("\n") + "\n";
+    const blob = new Blob([yamlContent], { type: "text/yaml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (screenplay.metadata?.title || "screenplay") + ".yaml";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("YAML 下载失败：" + e.message);
+  }
 }
 </script>
 
