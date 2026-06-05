@@ -2,16 +2,16 @@
   <div class="convert-page container">
     <!-- Workspace header -->
     <div class="ws-header" v-if="ws.state.currentId">
-      <span class="ws-title">{{ ws.state.title }}</span>
+      <input class="ws-title-input" v-model="editableTitle" @change="onTitleChange" @keyup.enter="($event.target).blur()" />
       <span class="ws-badge" :class="ws.state.isDirty ? 'dirty' : 'saved'">
-        {{ ws.state.isDirty ? '未保存' : '已保存' }}
+        {{ ws.state.isDirty ? 'δ����' : '�ѱ���' }}
       </span>
       <button class="btn btn-sm btn-secondary" @click="handleSave" :disabled="converting">
-        保存
+        ����
       </button>
     </div>
 
-    <h2 class="section-title">开始转换</h2>
+    <h2 class="section-title">��ʼת��</h2>
 
     <!-- Step 1: Input -->
     <NovelInput
@@ -38,7 +38,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import NovelInput from "../components/NovelInput.vue";
 import ConversionProgress from "../components/ConversionProgress.vue";
 import ScreenplayResult from "../components/ScreenplayResult.vue";
@@ -46,6 +46,14 @@ import { parseChapters, convertNovel } from "../api/client.js";
 import { useWorkspace } from "../composables/useWorkspace.js";
 
 const ws = useWorkspace();
+const editableTitle = ref(ws.state.title);
+watch(() => ws.state.title, (v) => { editableTitle.value = v; });
+
+function onTitleChange() {
+  ws.state.title = editableTitle.value;
+  ws.touch();
+  ws.save().catch(() => {});
+}
 
 const converting = ref(false);
 const phase = ref("idle");
@@ -58,6 +66,20 @@ const warnings = computed(() => {
   if (!result.value || !result.value.warnings) return [];
   return result.value.warnings;
 });
+
+function restoreFromWorkspace() {
+  if (ws.state.currentId && ws.state.chapters?.length) {
+    chapters.value = ws.state.chapters;
+    phase.value = "done";
+  }
+  if (ws.state.screenplay) {
+    result.value = ws.state.screenplay;
+    phase.value = "done";
+  }
+}
+
+onMounted(() => restoreFromWorkspace());
+watch(() => ws.state.currentId, () => restoreFromWorkspace());
 
 async function handleSave() {
   try {
@@ -77,7 +99,7 @@ async function handleSubmit(data) {
   try {
     // Update workspace state from input
     ws.state.rawText = data.text;
-    ws.state.title = data.title || "未命名作品";
+    ws.state.title = data.title || "δ������Ʒ";
     ws.state.author = data.author || "";
     ws.state.status = "converting";
     ws.state.isDirty = true;
@@ -93,17 +115,17 @@ async function handleSubmit(data) {
 
     phase.value = "converting";
     const novel = {
-      title: data.title || "未命名作品",
+      title: data.title || "δ������Ʒ",
       author: data.author || "",
       chapters: (parsed.chapters || []).map((ch, i) => ({
         index: ch.index || i + 1,
-        title: ch.title || `第${i + 1}章`,
+        title: ch.title || `��${i + 1}��`,
         text: ch.text || data.text,
       })),
     };
 
     if (!novel.chapters.length) {
-      novel.chapters = [{ index: 1, title: "全文", text: data.text }];
+      novel.chapters = [{ index: 1, title: "ȫ��", text: data.text }];
     }
 
     phase.value = "assembling";
@@ -117,7 +139,7 @@ async function handleSubmit(data) {
 
     phase.value = "done";
   } catch (e) {
-    error.value = e.message || "转换过程出错";
+    error.value = e.message || "ת�����̳���";
     phase.value = "error";
     ws.state.status = "error";
     await ws.save().catch(() => {});
@@ -163,5 +185,23 @@ async function handleSubmit(data) {
   font-size: 12px;
   padding: 4px 12px;
   margin-left: auto;
+}
+.ws-title-input {
+  font-weight: 600;
+  font-size: 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #e0e0e0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  outline: none;
+  min-width: 120px;
+}
+.ws-title-input:hover {
+  border-color: #3a3a5a;
+}
+.ws-title-input:focus {
+  border-color: #4a5ae0;
+  background: #12121e;
 }
 </style>

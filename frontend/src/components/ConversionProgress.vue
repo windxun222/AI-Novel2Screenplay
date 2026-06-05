@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="progress card">
     <h3 class="section-title">转换进度</h3>
 

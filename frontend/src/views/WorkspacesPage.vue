@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="workspaces container">
     <div class="page-header">
       <h2 class="section-title">工作区</h2>

@@ -40,15 +40,15 @@
         <div class="meta-grid">
           <div class="meta-item">
             <label>标题</label>
-            <span>{{ screenplay.metadata?.title }}</span>
+            <EditableField :value="screenplay.metadata?.title" @change="(v) => updateMeta('title', v)" />
           </div>
           <div class="meta-item">
             <label>来源</label>
-            <span>{{ screenplay.metadata?.source }}</span>
+            <EditableField :value="screenplay.metadata?.source" @change="(v) => updateMeta('source', v)" />
           </div>
           <div class="meta-item">
             <label>作者</label>
-            <span>{{ screenplay.metadata?.author }}</span>
+            <EditableField :value="screenplay.metadata?.author" @change="(v) => updateMeta('author', v)" />
           </div>
           <div class="meta-item">
             <label>章节数</label>
@@ -70,12 +70,19 @@
         <h3 class="section-title">角色表（{{ screenplay.characters.length }}）</h3>
         <div class="char-grid">
           <div v-for="c in screenplay.characters" :key="c.id" class="char-card">
-            <div class="char-name">{{ c.name }}</div>
+            <div class="char-name">
+              <EditableField :value="c.name" @change="(v) => updateChar(c, 'name', v)" />
+            </div>
             <div class="char-id">{{ c.id }}</div>
-            <div v-if="c.role" class="char-role">{{ c.role }}</div>
-            <div v-if="c.personality" class="char-trait">{{ c.personality }}</div>
-            <div v-if="c.aliases?.length" class="char-aliases">
-              别名：{{ c.aliases.join(", ") }}
+            <div v-if="c.role || isCharEditing(c, 'role')" class="char-role">
+              <EditableField label="角色" :value="c.role" @change="(v) => updateChar(c, 'role', v)" />
+            </div>
+            <div v-if="c.personality || isCharEditing(c, 'personality')" class="char-trait">
+              <EditableField label="性格" :value="c.personality" @change="(v) => updateChar(c, 'personality', v)" />
+            </div>
+            <div v-if="c.aliases?.length || isCharEditing(c, 'aliases')" class="char-aliases">
+              别名：
+              <EditableField :value="c.aliases?.join(', ')" @change="(v) => updateCharAliases(c, v)" />
             </div>
           </div>
         </div>
@@ -85,13 +92,21 @@
       <div class="result-scenes card">
         <h3 class="section-title">剧本内容</h3>
         <div v-for="act in screenplay.acts" :key="act.id" class="act-block">
-          <h4 class="act-title">{{ act.title }}</h4>
+          <h4 class="act-title">
+            <EditableField :value="act.title" @change="(v) => updateAct(act, 'title', v)" />
+          </h4>
           <div v-for="scene in act.scenes" :key="scene.id" class="scene-block">
-            <div class="scene-heading">{{ scene.heading }}</div>
-            <div class="scene-meta">
-              {{ scene.interior ? "内景" : "外景" }} | {{ scene.location }} | {{ scene.time }}
+            <div class="scene-heading">
+              <EditableField :value="scene.heading" @change="(v) => updateScene(scene, 'heading', v)" />
             </div>
-            <div v-if="scene.summary" class="scene-summary">{{ scene.summary }}</div>
+            <div class="scene-meta">
+              {{ scene.interior ? "内景" : "外景" }} |
+              <EditableField :value="scene.location" @change="(v) => updateScene(scene, 'location', v)" /> |
+              <EditableField :value="scene.time" @change="(v) => updateScene(scene, 'time', v)" />
+            </div>
+            <div v-if="scene.summary || isSceneEditing(scene, 'summary')" class="scene-summary">
+              <EditableField :value="scene.summary" @change="(v) => updateScene(scene, 'summary', v)" />
+            </div>
             <div class="scene-content">
               <div
                 v-for="(block, bi) in scene.content"
@@ -101,23 +116,25 @@
               >
                 <!-- Action -->
                 <div v-if="block.type === 'action'" class="block-action">
-                  {{ block.description }}
+                  <EditableField :value="block.description" @change="(v) => updateBlock(screenplay, block, 'description', v)" />
                 </div>
                 <!-- Dialogue -->
                 <div v-if="block.type === 'dialogue'" class="block-dialogue">
                   <span class="dialogue-char">{{ getCharName(block.character_id) }}</span>
-                  <div class="dialogue-line">{{ block.line }}</div>
-                  <div v-if="block.delivery" class="dialogue-delivery">
-                    （{{ block.delivery }}）
+                  <div class="dialogue-line">
+                    <EditableField :value="block.line" @change="(v) => updateBlock(screenplay, block, 'line', v)" />
+                  </div>
+                  <div v-if="block.delivery || isBlockEditing(block, 'delivery')" class="dialogue-delivery">
+                    （<EditableField :value="block.delivery" @change="(v) => updateBlock(screenplay, block, 'delivery', v)" />）
                   </div>
                 </div>
                 <!-- Narration -->
                 <div v-if="block.type === 'narration'" class="block-narration">
-                  V.O. {{ block.description }}
+                  V.O. <EditableField :value="block.description" @change="(v) => updateBlock(screenplay, block, 'description', v)" />
                 </div>
                 <!-- Transition -->
                 <div v-if="block.type === 'transition'" class="block-transition">
-                  {{ block.description }}
+                  <EditableField :value="block.description" @change="(v) => updateBlock(screenplay, block, 'description', v)" />
                 </div>
               </div>
             </div>
@@ -142,7 +159,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
+import { useWorkspace } from "../composables/useWorkspace.js";
+import EditableField from "./EditableField.vue";
 
 const props = defineProps({
   screenplay: Object,
@@ -150,6 +169,7 @@ const props = defineProps({
   warnings: Array,
 });
 
+const ws = useWorkspace();
 const copied = ref(false);
 
 const charMap = computed(() => {
@@ -171,15 +191,68 @@ function warnLabel(level) {
   return labels[level] || level;
 }
 
+// ── Inline editing ──
+let saveTimer = null;
+function scheduleSave() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    ws.state.screenplay = props.screenplay;
+    ws.touch();
+    ws.save().catch(() => {});
+  }, 1000);
+}
+
+function updateMeta(field, value) {
+  if (props.screenplay?.metadata) {
+    props.screenplay.metadata[field] = value;
+    scheduleSave();
+  }
+}
+
+function updateChar(c, field, value) {
+  c[field] = value || null;
+  scheduleSave();
+}
+
+function updateCharAliases(c, value) {
+  c.aliases = value ? value.split(/[,，]s*/) : [];
+  scheduleSave();
+}
+
+function updateAct(act, field, value) {
+  act[field] = value;
+  scheduleSave();
+}
+
+function updateScene(scene, field, value) {
+  scene[field] = value;
+  scheduleSave();
+}
+
+function updateBlock(_, block, field, value) {
+  block[field] = value;
+  scheduleSave();
+}
+
+// Helpers for conditional display
+function isCharEditing(c, field) {
+  return c[field] !== undefined && c[field] !== null;
+}
+function isSceneEditing(scene, field) {
+  return scene[field] !== undefined && scene[field] !== null && scene[field] !== "";
+}
+function isBlockEditing(block, field) {
+  return block[field] !== undefined && block[field] !== null && block[field] !== "";
+}
+
+// ── YAML export ──
 async function copyYAML() {
   try {
     const yaml = toYAML(props.screenplay);
     await navigator.clipboard.writeText(yaml);
     copied.value = true;
     setTimeout(() => (copied.value = false), 2000);
-  } catch {
-    // fallback
-  }
+  } catch {}
 }
 
 function downloadYAML() {
@@ -195,10 +268,6 @@ function downloadYAML() {
   URL.revokeObjectURL(url);
 }
 
-/**
- * Serialize a Screenplay object to YAML text.
- * Uses a simple indented format that produces valid, readable YAML.
- */
 function toYAML(screenplay) {
   if (!screenplay) return "";
   const lines = [];
@@ -206,7 +275,6 @@ function toYAML(screenplay) {
   const esc = (v) => {
     if (v == null) return "";
     const s = String(v);
-    // Quote strings that contain YAML special chars
     if (/[:#{}[\]&*!|>'\"@`,\-]/.test(s) || s.includes("\n") || /^\s/.test(s) || /\s$/.test(s)) {
       return JSON.stringify(s);
     }
@@ -214,8 +282,6 @@ function toYAML(screenplay) {
   };
 
   lines.push("screenplay:");
-
-  // --- Metadata ---
   const m = screenplay.metadata;
   if (m) {
     lines.push(I(1, "metadata:"));
@@ -228,7 +294,6 @@ function toYAML(screenplay) {
     lines.push(I(2, `version: ${esc(m.version || "1.0")}`));
   }
 
-  // --- Characters ---
   const chars = screenplay.characters || [];
   lines.push(I(1, "characters:"));
   if (chars.length === 0) {
@@ -249,7 +314,6 @@ function toYAML(screenplay) {
     }
   }
 
-  // --- Acts ---
   const acts = screenplay.acts || [];
   lines.push(I(1, "acts:"));
   if (acts.length === 0) {
@@ -290,7 +354,6 @@ function toYAML(screenplay) {
     }
   }
 
-  // --- Warnings ---
   const warnings = screenplay.warnings || [];
   lines.push(I(1, "warnings:"));
   if (warnings.length === 0) {
@@ -329,7 +392,6 @@ function toYAML(screenplay) {
   color: #8a6a6a;
   line-height: 1.8;
 }
-
 .result-warnings {
   border-color: #5a4a2a;
 }
@@ -380,9 +442,6 @@ function toYAML(screenplay) {
   font-size: 11px;
   color: #6a6a8a;
   margin-bottom: 2px;
-}
-.meta-item span {
-  font-size: 14px;
 }
 
 .char-grid {
@@ -492,5 +551,36 @@ function toYAML(screenplay) {
 .export-actions {
   display: flex;
   gap: 12px;
+}
+
+/* ── EditableField ── */
+.editable {
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: 4px;
+  transition: background 0.15s;
+  display: inline-block;
+  min-width: 1em;
+  border: 1px solid transparent;
+}
+.editable:hover {
+  background: #2a2a4a;
+  border-color: #3a3a5a;
+}
+.editable.empty {
+  color: #5a5a7a;
+  font-style: italic;
+}
+.editable-input {
+  background: #1a1a2e;
+  color: #e0e0e0;
+  border: 1px solid #4a5ae0;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: inherit;
+  font-family: inherit;
+  width: 100%;
+  min-width: 100px;
+  outline: none;
 }
 </style>
