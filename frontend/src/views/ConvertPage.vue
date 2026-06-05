@@ -22,7 +22,6 @@
       :screenplay="result"
       :error="error"
       :warnings="warnings"
-      :novel="novel"
     />
   </div>
 </template>
@@ -40,7 +39,6 @@ const chapters = ref([]);
 const chapterResults = ref({});
 const result = ref(null);
 const error = ref(null);
-const novel = ref(null);
 
 const warnings = computed(() => {
   if (!result.value || !result.value.warnings) return [];
@@ -59,7 +57,7 @@ async function handleSubmit(data) {
     chapters.value = parsed.chapters || [];
 
     phase.value = "converting";
-    novel.value = {
+    const novel = {
       title: data.title || "未命名作品",
       author: data.author || "",
       chapters: (parsed.chapters || []).map((ch, i) => ({
@@ -70,12 +68,12 @@ async function handleSubmit(data) {
     };
 
     // Use raw text if chapters were not parsed correctly
-    if (!novel.value.chapters.length) {
-      novel.value.chapters = [{ index: 1, title: "全文", text: data.text }];
+    if (!novel.chapters.length) {
+      novel.chapters = [{ index: 1, title: "全文", text: data.text }];
     }
 
     phase.value = "assembling";
-    const screenplay = await convertNovel(novel.value);
+    const screenplay = await convertNovel(novel);
     result.value = screenplay;
     phase.value = "done";
   } catch (e) {
