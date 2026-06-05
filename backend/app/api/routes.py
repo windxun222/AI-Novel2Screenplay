@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, HTTPException
+﻿from fastapi import APIRouter, HTTPException, Body
 from typing import List
 
 from app.models.novel import NovelInput, ChapterInput
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api", tags=["conversion"])
 
 
 @router.post("/chapters/parse")
-async def parse_chapters(text: str, title: str = "未命名作品", author: str = ""):
+async def parse_chapters(text: str = Body(...), title: str = Body("未命名作品"), author: str = Body("")):
     """Parse raw novel text into chapters (local processing, no API)."""
     try:
         chapters_raw = split_chapters(text)

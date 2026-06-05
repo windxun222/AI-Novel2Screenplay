@@ -67,4 +67,4 @@ class Screenplay(BaseModel):
     metadata: ScreenplayMeta
     characters: List[CharacterRef] = Field(default_factory=list)
     acts: List[Act] = Field(default_factory=list)
-    warnings: List[ContinuityWarning] = Field(default_factory=list, alias="_warnings")
+    warnings: List[ContinuityWarning] = Field(default_factory=list)
