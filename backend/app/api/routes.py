@@ -3,8 +3,10 @@ from typing import List
 
 from app.models.novel import NovelInput, ChapterInput, ParseRequest
 from app.models.screenplay import Screenplay
+from app.models.workspace import Workspace, WorkspaceSummary
 from app.services.ai_service import AIService
 from app.services.converter import Converter
+from app.services.workspace_store import list_all, load as load_ws, save as save_ws, delete as delete_ws
 from app.services.parser import split_chapters
 import yaml
 
@@ -227,3 +229,46 @@ async def get_schema():
             }
         }
     }
+
+
+# ── Workspace CRUD ──
+
+workspace_router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
+
+
+@workspace_router.get("", response_model=List[WorkspaceSummary])
+async def list_workspaces():
+    """List all saved workspaces (summary only)."""
+    return list_all()
+
+
+@workspace_router.post("", response_model=Workspace)
+async def create_workspace(ws: Workspace):
+    """Create or overwrite a workspace."""
+    return save_ws(ws)
+
+
+@workspace_router.get("/{workspace_id}", response_model=Workspace)
+async def get_workspace(workspace_id: str):
+    """Load a full workspace by ID."""
+    ws = load_ws(workspace_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail=f"工作区不存在：{workspace_id}")
+    return ws
+
+
+@workspace_router.put("/{workspace_id}", response_model=Workspace)
+async def update_workspace(workspace_id: str, ws: Workspace):
+    """Save/update a workspace."""
+    # Ensure path ID matches body
+    if ws.id != workspace_id:
+        ws.id = workspace_id
+    return save_ws(ws)
+
+
+@workspace_router.delete("/{workspace_id}")
+async def remove_workspace(workspace_id: str):
+    """Delete a workspace."""
+    if not delete_ws(workspace_id):
+        raise HTTPException(status_code=404, detail=f"工作区不存在：{workspace_id}")
+    return {"deleted": workspace_id}

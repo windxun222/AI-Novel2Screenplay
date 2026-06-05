@@ -49,17 +49,39 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
+import { useWorkspace } from "../composables/useWorkspace.js";
+
+const ws = useWorkspace();
 
 const emit = defineEmits(["submit"]);
 const props = defineProps({
   disabled: Boolean,
 });
 
-const title = ref("");
-const author = ref("");
-const text = ref("");
+const title = ref(ws.state.title);
+const author = ref(ws.state.author);
+const text = ref(ws.state.rawText);
 const error = ref("");
+
+// Sync from workspace → local refs when workspace loads
+watch(
+  () => [ws.state.currentId, ws.state.rawText, ws.state.title, ws.state.author],
+  () => {
+    title.value = ws.state.title;
+    author.value = ws.state.author;
+    text.value = ws.state.rawText;
+  },
+  { immediate: false }
+);
+
+// Sync local refs → workspace on change
+watch([title, author, text], () => {
+  ws.state.title = title.value;
+  ws.state.author = author.value;
+  ws.state.rawText = text.value;
+  ws.touch();
+}, { deep: false });
 
 const canSubmit = computed(() => text.value.trim().length >= 100);
 
