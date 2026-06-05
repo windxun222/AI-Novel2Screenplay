@@ -1,0 +1,79 @@
+﻿screenplay:
+  metadata:
+    title: "深渊回响"
+    source: "《深渊回响》"
+    author: "佚名"
+    adapter: "AI Novel2Screenplay"
+    created_at: "2026-06-05"
+    chapter_count: 3
+    version: "1.0"
+
+  characters:
+    - id: char_001
+      name: "林墨"
+      aliases: ["阿墨", "林警官"]
+      role: "主角"
+      gender: "男"
+      age: "28岁"
+      personality: "沉默寡言，观察力敏锐"
+      background: "前刑警，因故辞职"
+      notes: "贯穿全剧的核心人物"
+
+    - id: char_002
+      name: "苏晚"
+      aliases: ["小晚"]
+      role: "女主角"
+      gender: "女"
+      age: "25岁"
+      personality: "执着，心思细腻"
+      background: "调查记者"
+      notes: ""
+
+  acts:
+    - id: act_1
+      title: "第一章"
+      summary: "林墨在老街茶馆偶遇苏晚"
+      scenes:
+        - id: scene_001
+          number: 1
+          heading: "【外】老街·日"
+          location: "老街"
+          time: "日"
+          interior: false
+          summary: "林墨走在老街上，在老街茶馆前驻足"
+          content:
+            - type: "action"
+              description: "清晨的老街笼罩在薄雾中。石板路还带着夜里的潮气，两旁的店铺陆续开门。林墨穿着深灰色夹克，缓步走过老街。"
+            - type: "action"
+              description: "他在一家茶馆门口停下脚步，抬头看着褪色的招牌。"
+            - type: "dialogue"
+              character_id: "char_001"
+              line: "还是老样子。"
+              delivery: "低声自语"
+            - type: "action"
+              description: "林墨推门走进茶馆。"
+            - type: "transition"
+              description: "切至"
+
+        - id: scene_002
+          number: 2
+          heading: "【内】老街茶馆·日"
+          location: "老街茶馆"
+          time: "日"
+          interior: true
+          summary: "林墨在茶馆遇见正在调查旧案的苏晚"
+          content:
+            - type: "action"
+              description: "茶馆里茶香袅袅，零星坐了几桌客人。林墨在最里面的角落坐下。"
+            - type: "action"
+              description: "邻桌一个年轻女子正在翻看一个旧笔记本，眉头紧锁。她是苏晚。"
+            - type: "dialogue"
+              character_id: "char_001"
+              line: "你在看什么？"
+              delivery: "随口一问"
+            - type: "dialogue"
+              character_id: "char_002"
+              line: "啊，没什么……你是？"
+              delivery: "被突然搭话，有些警惕"
+            - type: "narration"
+              description: "林墨注意到她笔记本上贴着一张旧报纸剪报，标题隐约可见「老街失踪案」几个字。"

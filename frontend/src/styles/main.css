@@ -1,0 +1,109 @@
+﻿* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial,
+    sans-serif;
+  background: #0f0f1a;
+  color: #e0e0e0;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: #7c8cf0;
+  text-decoration: none;
+}
+a:hover {
+  color: #9aacff;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s, opacity 0.2s;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #4a5ae0;
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #5b6bf0;
+}
+
+.btn-secondary {
+  background: #2a2a4a;
+  color: #e0e0e0;
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #3a3a5a;
+}
+
+textarea, input {
+  font-family: inherit;
+  font-size: 14px;
+  color: #e0e0e0;
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+textarea:focus, input:focus {
+  border-color: #4a5ae0;
+}
+
+.card {
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: #e0e0e0;
+}
+
+code, pre {
+  font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+}
+
+pre {
+  background: #12121e;
+  border: 1px solid #2a2a4a;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
