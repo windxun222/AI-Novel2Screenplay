@@ -129,11 +129,11 @@
       <div class="result-export card">
         <h3 class="section-title">导出</h3>
         <div class="export-actions">
-          <button class="btn btn-primary" @click="copyYAML">
-            {{ copied ? "已复制" : "复制 YAML" }}
+          <button class="btn btn-primary" @click="copyJSON">
+            {{ copied ? "已复制" : "复制 JSON" }}
           </button>
-          <button class="btn btn-secondary" @click="downloadYAML">
-            下载 YAML 文件
+          <button class="btn btn-secondary" @click="downloadJSON">
+            下载 JSON 文件
           </button>
         </div>
       </div>
@@ -171,10 +171,10 @@ function warnLabel(level) {
   return labels[level] || level;
 }
 
-async function copyYAML() {
+async function copyJSON() {
   try {
-    const yaml = JSON.stringify(props.screenplay, null, 2);
-    await navigator.clipboard.writeText(yaml);
+    const json = JSON.stringify(props.screenplay, null, 2);
+    await navigator.clipboard.writeText(json);
     copied.value = true;
     setTimeout(() => (copied.value = false), 2000);
   } catch {
@@ -182,13 +182,13 @@ async function copyYAML() {
   }
 }
 
-function downloadYAML() {
-  const yaml = JSON.stringify(props.screenplay, null, 2);
-  const blob = new Blob([yaml], { type: "text/yaml;charset=utf-8" });
+function downloadJSON() {
+  const json = JSON.stringify(props.screenplay, null, 2);
+  const blob = new Blob([json], { type: "application/json;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = (props.screenplay?.metadata?.title || "screenplay") + ".yaml";
+  a.download = (props.screenplay?.metadata?.title || "screenplay") + ".json";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

@@ -19,11 +19,12 @@ async def parse_chapters(text: str = Body(...), title: str = Body("未命名作�
         result = []
         for i, ch_text in enumerate(chapters_raw, 1):
             lines = ch_text.strip().split("\n", 1)
-            ch_title = lines[0].strip() if len(lines) > 1 else "第%d章" % i
+            ch_title = lines[0].strip() if len(lines) > 1 else f"第{i}章"
             body = lines[1] if len(lines) > 1 else ch_text
             result.append({
                 "index": i,
                 "title": ch_title,
+                "text": body,
                 "text_preview": body[:200],
                 "text_length": len(body),
             })
