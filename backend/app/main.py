@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import APP_VERSION
 from app.config import settings
-from app.api.routes import router
+from app.api.routes import router, workspace_router
 
 app = FastAPI(
     title="AI Novel2Screenplay",
@@ -20,6 +20,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(workspace_router)
 
 
 @app.get("/")
