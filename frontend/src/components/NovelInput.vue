@@ -17,7 +17,7 @@
 
     <textarea
       v-model="text"
-      placeholder="将你的小说文本粘贴到这里，至少 3 章内容。&#10;&#10;支持格式：&#10;第1章 / 第一章 / Chapter 1 等标记&#10;&#10;或者上传 .txt 文件："
+      placeholder="将你的小说文本粘贴到这里，支持 1 章以上内容。&#10;&#10;支持格式：&#10;第1章 / 第一章 / Chapter 1 等标记&#10;&#10;或者上传 .txt 文件："
       class="input-textarea"
       rows="12"
       :disabled="disabled"
@@ -79,7 +79,7 @@ function handleFileUpload(e) {
 
 function handleSubmit() {
   if (!canSubmit.value) {
-    error.value = "请输入至少 100 字的小说内容（建议 3 章以上）";
+    error.value = "请输入至少 100 字的小说内容（建议 1 章以上）";
     return;
   }
   error.value = "";

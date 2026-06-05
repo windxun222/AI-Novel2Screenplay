@@ -28,6 +28,20 @@ export async function convertNovel(novel) {
   });
 }
 
+export async function convertNovelYAML(novel) {
+  const url = BASE + "/convert/yaml";
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(novel),
+  });
+  if (!resp.ok) {
+    const error = await resp.json().catch(() => ({ detail: resp.statusText }));
+    throw new Error(error.detail || `HTTP ${resp.status}`);
+  }
+  return resp.blob();
+}
+
 export async function getSchema() {
   return request("/schema");
 }

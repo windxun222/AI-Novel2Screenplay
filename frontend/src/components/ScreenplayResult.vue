@@ -8,7 +8,7 @@
         请检查：
         <br />1. DeepSeek API Key 是否已配置
         <br />2. 网络连接是否正常
-        <br />3. 小说文本是否包含至少 3 章内容
+        <br />3. 小说文本是否包含至少 1 章内容
       </p>
     </div>
 
@@ -135,6 +135,9 @@
           <button class="btn btn-secondary" @click="downloadJSON">
             下载 JSON 文件
           </button>
+          <button class="btn btn-secondary" @click="downloadYAML">
+            下载 YAML 文件
+          </button>
         </div>
       </div>
     </div>
@@ -148,6 +151,7 @@ const props = defineProps({
   screenplay: Object,
   error: String,
   warnings: Array,
+  novel: Object,
 });
 
 const copied = ref(false);
@@ -193,6 +197,31 @@ function downloadJSON() {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+async function downloadYAML() {
+  try {
+    const resp = await fetch("/api/convert/yaml", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(props.novel),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+      throw new Error(err.detail || `HTTP ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (props.screenplay?.metadata?.title || "screenplay") + ".yaml";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert("YAML 下载失败：" + e.message);
+  }
 }
 </script>
 

@@ -44,7 +44,7 @@ class ContextHub:
         lines = []
         for idx in sorted(self.chapter_summaries):
             if idx < up_to_chapter:
-                lines.append("第%d章概要：%s" % (idx, self.chapter_summaries[idx]))
+                lines.append(f"第{idx}章概要：{self.chapter_summaries[idx]}")
         return "\n".join(lines)
 
     def add_warning(self, level: str, wtype: str, message: str, locations: List[str] = None):
@@ -64,7 +64,7 @@ class Converter:
     def pre_scan(self, novel: NovelInput) -> bool:
         """Phase 0: Lightweight pre-scan to extract character names and chapter summaries."""
         chapter_texts = "\n\n=====\n\n".join(
-            "第%d章：%s" % (c.index, c.text[:2000]) for c in novel.chapters
+            f"第{c.index}章：{c.text[:2000]}" for c in novel.chapters
         )
         user_msg = PRE_SCAN_USER_TEMPLATE.format(
             title=novel.title,

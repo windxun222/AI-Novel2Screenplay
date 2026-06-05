@@ -59,7 +59,7 @@ class ScreenplayMeta(BaseModel):
     author: Optional[str] = None
     adapter: str = 'AI Novel2Screenplay'
     created_at: date = Field(default_factory=date.today)
-    chapter_count: int = Field(ge=3)
+    chapter_count: int = Field(ge=1)
     version: str = '1.0'
 
 

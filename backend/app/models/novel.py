@@ -11,4 +11,4 @@ class ChapterInput(BaseModel):
 class NovelInput(BaseModel):
     title: str
     author: Optional[str] = None
-    chapters: List[ChapterInput] = Field(min_length=3)
+    chapters: List[ChapterInput] = Field(min_length=1)

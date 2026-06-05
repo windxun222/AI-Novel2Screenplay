@@ -21,7 +21,7 @@ screenplay:
     author:      string|null  # 原著作者
     adapter:     string       # 转换工具标识，固定值为 "AI Novel2Screenplay"
     created_at:  date         # 转换日期，格式 YYYY-MM-DD
-    chapter_count: int        # 输入的章节数（>= 3）
+    chapter_count: int        # 输入的章节数（>= 1）
     version:     string       # Schema 版本号
 
   # ── 角色表 ──
@@ -58,7 +58,7 @@ screenplay:
               transition_type: string # type=transition 时使用
 
   # ── 连续性警告 ──
-  _warnings:
+  warnings:
     - level:     string    # 严重级别：info / warning / error
       type:      string    # 警告类型标识
       message:   string    # 人类可读的描述

@@ -1,5 +1,5 @@
 ﻿from pydantic_settings import BaseSettings
-
+from pathlib import Path
 
 class Settings(BaseSettings):
     deepseek_api_key: str = ''
@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     app_port: int = 8000
     cors_origins: str = 'http://localhost:5173,http://localhost:3000'
 
-    model_config = {'env_file': '.env', 'env_file_encoding': 'utf-8'}
+    model_config = {
+        'env_file': str(Path(__file__).resolve().parent.parent.parent / '.env'),
+        'env_file_encoding': 'utf-8',
+    }
 
 
 settings = Settings()
