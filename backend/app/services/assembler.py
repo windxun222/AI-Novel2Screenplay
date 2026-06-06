@@ -143,10 +143,17 @@ class Assembler:
         scenes = []
         try:
             data = yaml.safe_load(yaml_text)
-            if not data or "scenes" not in data:
+            if not data:
                 return scenes
 
-            for i, s in enumerate(data["scenes"], 1):
+            # The AI may output {"scenes": [...]} or {"screenplay": {"scenes": [...]}}
+            scenes_data = data.get("scenes", [])
+            if not scenes_data and "screenplay" in data:
+                scenes_data = data["screenplay"].get("scenes", [])
+            if not scenes_data:
+                return scenes
+
+            for i, s in enumerate(scenes_data, 1):
                 heading = s.get("heading", "")
                 location = s.get("location", "")
                 interior = s.get("interior", True)

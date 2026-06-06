@@ -1,12 +1,16 @@
 ﻿from fastapi import APIRouter, HTTPException, Response
-from typing import List
+from typing import List, Dict
+from pydantic import BaseModel
 
 from app.models.novel import NovelInput, ChapterInput, ParseRequest
 from app.models.screenplay import Screenplay
+from app.models.workspace import Workspace, WorkspaceSummary
 from app.services.ai_service import AIService
 from app.services.converter import Converter
+from app.services.workspace_store import list_all, load as load_ws, save as save_ws, delete as delete_ws
 from app.services.parser import split_chapters
 import yaml
+from app.services.converter import _extract_yaml_block
 
 router = APIRouter(prefix="/api", tags=["conversion"])
 
@@ -158,6 +162,91 @@ async def convert_novel(novel: NovelInput):
         raise HTTPException(status_code=500, detail=f"转换过程出错：{e}")
 
 
+
+# ── Step-by-step conversion ──
+
+class PreScanResult(BaseModel):
+    characters: List[dict] = []
+    chapter_summaries: Dict[int, str] = {}
+
+
+class ChapterConvertRequest(BaseModel):
+    chapter_index: int
+    chapter_text: str
+    existing_characters: List[dict] = []
+    previous_summaries: Dict[int, str] = {}
+
+
+@router.post("/convert/pre-scan")
+async def pre_scan_novel(novel: NovelInput):
+    """Phase 0 only: pre-scan to extract global character list and chapter summaries."""
+    ai = AIService()
+    if not ai.is_available():
+        raise HTTPException(status_code=503, detail="DeepSeek API not configured")
+    converter = Converter(ai)
+    success = converter.pre_scan(novel)
+    if not success:
+        raise HTTPException(status_code=500, detail="Pre-scan failed")
+    return {
+        "characters": converter.context.characters,
+        "chapter_summaries": converter.context.chapter_summaries,
+    }
+
+
+@router.post("/convert/chapter")
+async def convert_single_chapter(req: ChapterConvertRequest):
+    """Phase 1 for one chapter: convert with provided context, return YAML."""
+    ai = AIService()
+    if not ai.is_available():
+        raise HTTPException(status_code=503, detail="DeepSeek API not configured")
+    converter = Converter(ai)
+    # Inject existing context
+    converter.context.characters = req.existing_characters
+    converter.context.chapter_summaries = req.previous_summaries
+    # Convert the chapter
+    ch = ChapterInput(index=req.chapter_index, text=req.chapter_text)
+    raw = converter.convert_chapter(NovelInput(title="", chapters=[ch]), ch)
+    if not raw:
+        raise HTTPException(status_code=500, detail=f"Chapter {req.chapter_index} conversion failed")
+    # Parse the YAML to extract scenes + new characters
+    try:
+        cleaned = _extract_yaml_block(raw)
+        data = yaml.safe_load(cleaned)
+        scenes_data = data.get("scenes", []) if data else []
+        chars_data = data.get("characters", []) if data else []
+    except Exception:
+        scenes_data = []
+        chars_data = []
+    return {
+        "raw_yaml": raw,
+        "scenes": scenes_data,
+        "new_characters": chars_data,
+    }
+
+
+@router.post("/convert/assemble")
+async def assemble_chapters(novel: NovelInput):
+    """Phase 2: assemble pre-collected chapter YAMLs from workspace context."""
+    from app.services.assembler import Assembler
+    ai = AIService()
+    converter = Converter(ai)
+    # The chapters in novel input contain pre-converted YAML in their text field
+    chapter_yamls = {}
+    for ch in novel.chapters:
+        chapter_yamls[ch.index] = ch.text
+    assembler = Assembler()
+    # Build minimal context from the chapters
+    class DummyContext:
+        def __init__(self):
+            self.characters = []
+            self.continuity_warnings = []
+    ctx = DummyContext()
+    result = assembler.assemble(novel, chapter_yamls, ctx)
+    if not result:
+        raise HTTPException(status_code=500, detail="Assembly failed")
+    return result
+
+
 @router.get("/schema")
 async def get_schema():
     """Return the screenplay YAML schema as JSON."""
@@ -227,3 +316,46 @@ async def get_schema():
             }
         }
     }
+
+
+# ── Workspace CRUD ──
+
+workspace_router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
+
+
+@workspace_router.get("", response_model=List[WorkspaceSummary])
+async def list_workspaces():
+    """List all saved workspaces (summary only)."""
+    return list_all()
+
+
+@workspace_router.post("", response_model=Workspace)
+async def create_workspace(ws: Workspace):
+    """Create or overwrite a workspace."""
+    return save_ws(ws)
+
+
+@workspace_router.get("/{workspace_id}", response_model=Workspace)
+async def get_workspace(workspace_id: str):
+    """Load a full workspace by ID."""
+    ws = load_ws(workspace_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail=f"工作区不存在：{workspace_id}")
+    return ws
+
+
+@workspace_router.put("/{workspace_id}", response_model=Workspace)
+async def update_workspace(workspace_id: str, ws: Workspace):
+    """Save/update a workspace."""
+    # Ensure path ID matches body
+    if ws.id != workspace_id:
+        ws.id = workspace_id
+    return save_ws(ws)
+
+
+@workspace_router.delete("/{workspace_id}")
+async def remove_workspace(workspace_id: str):
+    """Delete a workspace."""
+    if not delete_ws(workspace_id):
+        raise HTTPException(status_code=404, detail=f"工作区不存在：{workspace_id}")
+    return {"deleted": workspace_id}

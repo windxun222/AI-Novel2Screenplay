@@ -9,6 +9,7 @@
         <nav class="nav">
           <router-link to="/" class="nav-link">首页</router-link>
           <router-link to="/convert" class="nav-link">开始转换</router-link>
+          <router-link to="/workspaces" class="nav-link">工作区</router-link>
         </nav>
       </div>
     </header>
