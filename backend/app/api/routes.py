@@ -217,6 +217,27 @@ async def convert_single_chapter(req: ChapterConvertRequest):
     except Exception:
         scenes_data = []
         chars_data = []
+
+    # Post-process: remap character_ids in scenes to match pre-scan IDs
+    name_to_id = {}
+    for ec in req.existing_characters:
+        if ec.get("name") and ec.get("id"):
+            name_to_id[ec["name"]] = ec["id"]
+    ch_id_to_name = {}
+    for cc in chars_data:
+        if cc.get("id") and cc.get("name"):
+            ch_id_to_name[cc["id"]] = cc["name"]
+    for scene in scenes_data:
+        for block in scene.get("content", []):
+            if block.get("type") == "dialogue" and block.get("character_id"):
+                cid = block["character_id"]
+                if cid in ch_id_to_name:
+                    ch_name = ch_id_to_name[cid]
+                    if ch_name in name_to_id:
+                        correct_id = name_to_id[ch_name]
+                        if correct_id != cid:
+                            block["character_id"] = correct_id
+
     return {
         "raw_yaml": raw,
         "scenes": scenes_data,
@@ -224,26 +245,88 @@ async def convert_single_chapter(req: ChapterConvertRequest):
     }
 
 
-@router.post("/convert/assemble")
-async def assemble_chapters(novel: NovelInput):
-    """Phase 2: assemble pre-collected chapter YAMLs from workspace context."""
+
+@router.post("/convert/recheck")
+async def recheck_warnings(screenplay: Screenplay):
+    """Re-run continuity checks on the current screenplay state."""
     from app.services.assembler import Assembler
-    ai = AIService()
-    converter = Converter(ai)
-    # The chapters in novel input contain pre-converted YAML in their text field
-    chapter_yamls = {}
-    for ch in novel.chapters:
-        chapter_yamls[ch.index] = ch.text
-    assembler = Assembler()
-    # Build minimal context from the chapters
-    class DummyContext:
+    
+    # Build a minimal context to run checks
+    class CheckContext:
         def __init__(self):
             self.characters = []
             self.continuity_warnings = []
-    ctx = DummyContext()
+    
+    assembler = Assembler()
+    ctx = CheckContext()
+    
+    # Flatten all scenes
+    all_scenes = []
+    for act in screenplay.acts:
+        for scene in act.scenes:
+            all_scenes.append(scene)
+    
+    new_warnings = []
+    
+    # Run all checks
+    for w in assembler._check_orphan_characters(all_scenes, screenplay.characters):
+        new_warnings.append(w)
+    for w in assembler._check_location_consistency(all_scenes):
+        new_warnings.append(w)
+    for w in assembler._check_scene_gaps(all_scenes):
+        new_warnings.append(w)
+    for w in ctx.continuity_warnings:
+        new_warnings.append(w)
+    
+    return {"warnings": new_warnings}
+
+class AssembleRequest(BaseModel):
+    title: str = ""
+    author: str = ""
+    chapters: list = []
+    characters: list = []
+
+
+@router.post("/convert/assemble")
+async def assemble_chapters(req: AssembleRequest):
+    """Phase 2: assemble pre-collected chapter YAMLs with character context."""
+    from app.services.assembler import Assembler
+    from app.models.novel import NovelInput, ChapterInput
+    chapter_yamls = {}
+    novel_chapters = []
+    for ch in req.chapters:
+        idx = ch.get("index", 0)
+        chapter_yamls[idx] = ch.get("text", "")
+        novel_chapters.append(ChapterInput(index=idx, text=ch.get("text", ""), title=ch.get("title", "")))
+    novel = NovelInput(title=req.title, author=req.author, chapters=novel_chapters)
+
+    class StepContext:
+        def __init__(self):
+            self.characters = req.characters
+            self.continuity_warnings = []
+    ctx = StepContext()
+
+    assembler = Assembler()
     result = assembler.assemble(novel, chapter_yamls, ctx)
     if not result:
         raise HTTPException(status_code=500, detail="Assembly failed")
+
+    # Post-assembly: remap character_ids in all scenes to match pre-scan IDs
+    name_to_id = {}
+    for c in req.characters:
+        if c.get("name") and c.get("id"):
+            name_to_id[c["name"]] = c["id"]
+
+    for act in result.acts:
+        for scene in act.scenes:
+            for block in scene.content:
+                if block.character_id:
+                    # Find which character this ID refers to (by ID match in result characters)
+                    ref = next((rc for rc in result.characters if rc.id == block.character_id), None)
+                    if ref and ref.name in name_to_id:
+                        correct_id = name_to_id[ref.name]
+                        if correct_id != block.character_id:
+                            block.character_id = correct_id
     return result
 
 

@@ -65,19 +65,23 @@ class Assembler:
 
         # Collect all character entries from all chapters
         all_entries = []
+
+        # Include pre-scan characters FIRST so their IDs take priority over AI-generated ones
+        for pc in context.characters:
+            if pc.get("name"):
+                all_entries.append(dict(pc))
+
+        # Then add chapter YAML characters (same name ? merge into existing, different name ? add)
         for ch_yaml in chapter_yamls.values():
             try:
                 data = yaml.safe_load(ch_yaml)
                 if data and "characters" in data:
-                    all_entries.extend(data["characters"])
+                    for c in data["characters"]:
+                        existing = [e for e in all_entries if e.get("name") == c.get("name")]
+                        if not existing:
+                            all_entries.append(c)
             except yaml.YAMLError:
                 pass
-
-        # Also include pre-scan characters
-        for pc in context.characters:
-            existing = [e for e in all_entries if e.get("name") == pc.get("name")]
-            if not existing:
-                all_entries.append(pc)
 
         # Step 1: Exact name match
         # Track a counter for generating unique IDs for entries without one
@@ -119,7 +123,21 @@ class Assembler:
         unmatched = [n for n in merged.keys() if False]  # Placeholder, users confirm via UI
         # Fuzzy match is handled at the UI layer; local assembler only does exact+alias
 
-        return list(merged.values())
+        result = list(merged.values())
+
+        # Ensure unique IDs ? if two different characters share the same ID, reassign
+        seen_ids = set()
+        for c in result:
+            if c.id in seen_ids:
+                # Find a new unique ID
+                for n in range(1, 999):
+                    new_id = f"char_{n:03d}"
+                    if new_id not in seen_ids:
+                        c.id = new_id
+                        break
+            seen_ids.add(c.id)
+
+        return result
 
     def _merge_fields(self, target: CharacterRef, source: CharacterRef):
         """Merge source into target, keeping target's values as authoritative."""
