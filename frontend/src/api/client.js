@@ -56,6 +56,35 @@ export async function saveWorkspace(id, ws) {
   });
 }
 
+
+// ── Step-by-step conversion ──
+
+export async function preScan(novel) {
+  return request("/convert/pre-scan", {
+    method: "POST",
+    body: JSON.stringify(novel),
+  });
+}
+
+export async function convertChapter(chapterIndex, chapterText, existingChars, prevSummaries) {
+  return request("/convert/chapter", {
+    method: "POST",
+    body: JSON.stringify({
+      chapter_index: chapterIndex,
+      chapter_text: chapterText,
+      existing_characters: existingChars,
+      previous_summaries: prevSummaries,
+    }),
+  });
+}
+
+export async function assembleStep(novel) {
+  return request("/convert/assemble", {
+    method: "POST",
+    body: JSON.stringify(novel),
+  });
+}
+
 export async function deleteWorkspace(id) {
   return request(`/workspaces/${id}`, {
     method: "DELETE",

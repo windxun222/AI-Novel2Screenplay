@@ -2,6 +2,10 @@
   <div class="workspaces container">
     <div class="page-header">
       <h2 class="section-title">工作区</h2>
+      <label class="btn btn-secondary" style="cursor:pointer">
+        <input type="file" accept=".json" @change="handleImport" hidden />
+        导入工作区
+      </label>
       <button class="btn btn-primary" @click="handleNew">新建工作区</button>
     </div>
 
@@ -31,6 +35,7 @@
             <span class="ws-date">{{ formatDate(ws.updated_at) }}</span>
           </div>
         </div>
+        <button class="btn btn-secondary btn-sm" style="margin-right:8px" @click.stop="handleExport(ws)">导出</button>
         <button class="btn btn-danger btn-sm" @click.stop="handleDelete(ws)">删除</button>
       </div>
     </div>
@@ -92,6 +97,47 @@ async function handleOpen(ws) {
 
 function handleDelete(ws) {
   deleteTarget.value = ws;
+}
+
+async function handleExport(ws) {
+  try {
+    const resp = await fetch(`/api/workspaces/${ws.id}`);
+    if (!resp.ok) throw new Error("Failed to load");
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (ws.title || "workspace") + ".json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch {
+    // silent fail
+  }
+}
+
+async function handleImport(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    // Ensure it has required fields
+    if (!data.title) data.title = file.name.replace(/\.json$/, "");
+    const resp = await fetch("/api/workspaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (resp.ok) {
+      await refresh();
+    }
+  } catch {
+    // silent fail
+  } finally {
+    e.target.value = "";
+  }
 }
 
 async function confirmDelete() {

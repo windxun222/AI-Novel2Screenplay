@@ -18,6 +18,8 @@ const state = reactive({
   chapters: [],
   /** Conversion result (null until converted) */
   screenplay: null,
+  stepResults: {},
+  stepPhase: 'idle',
   /** Workspace status */
   status: "draft",
 });
@@ -50,6 +52,8 @@ async function create(title, author = "") {
     rawText: ws.raw_text || "",
     chapters: ws.chapters || [],
     screenplay: ws.screenplay || null,
+    stepResults: ws.step_results || {},
+    stepPhase: ws.step_phase || 'idle',
     status: ws.status,
     isDirty: false,
   });
@@ -151,6 +155,8 @@ function _toPayload() {
     raw_text: state.rawText,
     chapters: state.chapters,
     screenplay: state.screenplay,
+    step_results: state.stepResults,
+    step_phase: state.stepPhase,
   };
 }
 
