@@ -204,7 +204,6 @@ async def convert_single_chapter(req: ChapterConvertRequest):
     converter.context.characters = req.existing_characters
     converter.context.chapter_summaries = req.previous_summaries
     # Convert the chapter
-    from app.models.novel import ChapterInput
     ch = ChapterInput(index=req.chapter_index, text=req.chapter_text)
     raw = converter.convert_chapter(NovelInput(title="", chapters=[ch]), ch)
     if not raw:
@@ -229,7 +228,6 @@ async def convert_single_chapter(req: ChapterConvertRequest):
 async def assemble_chapters(novel: NovelInput):
     """Phase 2: assemble pre-collected chapter YAMLs from workspace context."""
     from app.services.assembler import Assembler
-    from app.config import settings
     ai = AIService()
     converter = Converter(ai)
     # The chapters in novel input contain pre-converted YAML in their text field

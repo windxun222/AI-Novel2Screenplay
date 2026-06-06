@@ -39,11 +39,26 @@
       </div>
 
       <!-- ── 角色表 ── -->
-      <div v-if="screenplay.characters?.length" class="result-chars card">
-        <h3 class="section-title">角色表（{{ screenplay.characters.length }}）</h3>
-        <div class="char-grid">
-          <div v-for="c in screenplay.characters" :key="c.id" class="char-card">
+      <div class="result-chars card">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <h3 class="section-title" style="margin:0">角色表（{{ screenplay.characters?.length || 0 }}）</h3>
+          <button class="btn btn-sm btn-secondary" @click="addResultChar">+ 添加角色</button>
+          <button class="btn btn-sm" :class="mergeMode ? 'btn-primary' : 'btn-secondary'" @click="toggleMerge">
+            {{ mergeMode ? '取消合并' : '合并角色' }}
+          </button>
+          <span v-if="mergeMode && mergeSelected.length === 1" style="font-size:12px;color:#a0b4ff;padding:2px 8px;background:#1a1a3a;border-radius:4px">
+            已选「{{ mergeSelected[0].name }}」，请点击第二个角色
+          </span>
+        </div>
+        <div v-if="!screenplay.characters?.length" style="font-size:13px;color:#6a6a8a;padding:8px 0">暂无角色，点击上方「+ 添加角色」创建</div>
+        <div class="char-grid" v-if="screenplay.characters?.length">
+          <div v-for="c in screenplay.characters" :key="c.id" class="char-card" :class="{ 'char-merge-selected': mergeSelected.includes(c) }" @click="mergeMode ? onMergeSelect(c) : null" :style="mergeMode ? 'cursor:pointer' : ''">
             <div class="char-name"><EditableField :value="c.name" @change="(v) => updateChar(c, 'name', v)" /></div>
+            <button class="btn-char-delete" @click="deleteResultChar(c)" title="删除角色">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <path d="M2 4h10M5 4V2.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V4M11 4v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4"/>
+              </svg>
+            </button>
             <div class="char-id">{{ c.id }}</div>
             <div v-if="c.role || isCharEditing(c, 'role')" class="char-role"><EditableField label="角色" :value="c.role" @change="(v) => updateChar(c, 'role', v)" /></div>
             <div v-if="c.personality || isCharEditing(c, 'personality')" class="char-trait"><EditableField label="性格" :value="c.personality" @change="(v) => updateChar(c, 'personality', v)" /></div>
@@ -79,11 +94,8 @@
                     <EditableField :value="block.description || ''" @change="(v) => updateBlock(screenplay, block, 'description', v)" />
                   </div>
                   <div v-if="block.type === 'dialogue'" class="block-dialogue">
-                    <span class="dialogue-char">{{ getCharName(block.character_id) }} <span style="font-size:11px;color:#6a6a8a">({{ block.character_id || '?' }})</span></span>
-                    <div style="margin-bottom:2px">
-                <EditableField label="角色ID" :value="block.character_id || ''" @change="(v) => updateBlock(screenplay, block, 'character_id', v)" />
-              </div>
-              <div class="dialogue-line"><EditableField :value="block.line || ''" @change="(v) => updateBlock(screenplay, block, 'line', v)" /></div>
+                    <span class="dialogue-char">{{ getCharName(block.character_id) }} (<EditableField :value="block.character_id || ''" @change="(v) => updateBlock(screenplay, block, 'character_id', v)" />)</span>
+                    <div class="dialogue-line"><EditableField :value="block.line || ''" @change="(v) => updateBlock(screenplay, block, 'line', v)" /></div>
                     <div v-if="block.delivery || isBlockEditing(block, 'delivery')" class="dialogue-delivery">
                       （<EditableField :value="block.delivery || ''" @change="(v) => updateBlock(screenplay, block, 'delivery', v)" />）
                     </div>
@@ -134,6 +146,18 @@
         </div>
       </div>
 
+      <!-- ── 合并确认弹窗 ── -->
+      <div v-if="mergeConfirmVisible" class="modal-overlay" @click.self="mergeConfirmVisible = false">
+        <div class="modal card">
+          <p style="margin-bottom:8px">确定要将「{{ mergeSelected[1]?.name }}」合并到「{{ mergeSelected[0]?.name }}」吗？</p>
+          <p style="font-size:12px;color:#8a8aaa;margin-bottom:16px">被合并角色的别名、性格等属性将合并到目标角色中，被合并角色将被删除。</p>
+          <div class="modal-actions">
+            <button class="btn btn-secondary" @click="mergeConfirmVisible = false">取消</button>
+            <button class="btn btn-primary" @click="doMerge">确认合并</button>
+          </div>
+        </div>
+      </div>
+
       <!-- ── 导出 ── -->
       <div class="result-export card">
         <h3 class="section-title">导出</h3>
@@ -147,7 +171,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, reactive } from "vue";
 import EditableField from "./EditableField.vue";
 import { useWorkspace } from "../composables/useWorkspace.js";
 
@@ -207,6 +231,98 @@ async function scheduleSave() {
 function updateMeta(field, value) { if (props.screenplay?.metadata) { props.screenplay.metadata[field] = value; scheduleSave(); } }
 function updateChar(c, field, value) { c[field] = value || null; scheduleSave(); }
 function updateCharAliases(c, value) { c.aliases = value ? value.split(/[,，]s*/).filter(Boolean) : []; scheduleSave(); }
+function addResultChar() {
+  if (!props.screenplay?.characters) return;
+  var usedIds = new Set();
+  props.screenplay.characters.forEach(function(c) { if (c.id) usedIds.add(c.id); });
+  var newId = '';
+  for (var n = 1; n <= 999; n++) {
+    var candidate = 'char_' + String(n).padStart(3, '0');
+    if (!usedIds.has(candidate)) { newId = candidate; break; }
+  }
+  if (!newId) newId = 'char_' + String(props.screenplay.characters.length + 1).padStart(3, '0');
+  props.screenplay.characters.push({ id: newId, name: '新角色', aliases: [], role: '', personality: '' });
+  scheduleSave();
+}
+
+function deleteResultChar(c) {
+  if (!props.screenplay?.characters) return;
+  var usedIn = [];
+  if (props.screenplay.acts) {
+    props.screenplay.acts.forEach(function(act) {
+      if (act.scenes) act.scenes.forEach(function(scene) {
+        if (scene.content) scene.content.forEach(function(block) {
+          if (block.character_id && block.character_id === c.id) {
+            usedIn.push(scene.heading || scene.id);
+          }
+        });
+      });
+    });
+  }
+  if (usedIn.length > 0) {
+    alert('角色「' + c.name + '」在 ' + usedIn.length + ' 处场景对白中被引用，无法删除。可以编辑该角色的信息。');
+    return;
+  }
+  var idx = props.screenplay.characters.indexOf(c);
+  if (idx >= 0) {
+    props.screenplay.characters.splice(idx, 1);
+    scheduleSave();
+  }
+}
+
+// ── Merge characters ──
+var mergeMode = ref(false);
+var mergeSelected = reactive([]);
+var mergeConfirmVisible = ref(false);
+
+function toggleMerge() {
+  if (mergeMode.value) { mergeSelected.splice(0); }
+  mergeMode.value = !mergeMode.value;
+}
+
+function onMergeSelect(c) {
+  if (!mergeMode.value) return;
+  if (mergeSelected.includes(c)) {
+    var idx = mergeSelected.indexOf(c);
+    if (idx >= 0) mergeSelected.splice(idx, 1);
+  } else if (mergeSelected.length < 2) {
+    mergeSelected.push(c);
+  }
+  if (mergeSelected.length === 2) {
+    mergeConfirmVisible.value = true;
+  }
+}
+
+function doMerge() {
+  if (mergeSelected.length !== 2 || !props.screenplay?.characters) return;
+  var target = mergeSelected[0];
+  var source = mergeSelected[1];
+  // Merge aliases
+  if (source.aliases && source.aliases.length) {
+    if (!target.aliases) target.aliases = [];
+    source.aliases.forEach(function(a) { if (!target.aliases.includes(a)) target.aliases.push(a); });
+  }
+  // Add source name as alias
+  if (source.name && !(target.aliases || []).includes(source.name)) {
+    if (!target.aliases) target.aliases = [];
+    target.aliases.push(source.name);
+  }
+  // Fill empty fields
+  if (!target.role && source.role) target.role = source.role;
+  if (!target.gender && source.gender) target.gender = source.gender;
+  if (!target.age && source.age) target.age = source.age;
+  if (!target.personality && source.personality) target.personality = source.personality;
+  if (!target.background && source.background) target.background = source.background;
+  if (!target.notes && source.notes) target.notes = source.notes;
+  // Remove source
+  var idx = props.screenplay.characters.indexOf(source);
+  if (idx >= 0) props.screenplay.characters.splice(idx, 1);
+  mergeSelected.splice(0);
+  mergeMode.value = false;
+  mergeConfirmVisible.value = false;
+  scheduleSave();
+}
+
 function updateAct(act, field, value) { act[field] = value; scheduleSave(); }
 function updateScene(scene, field, value) { scene[field] = value; scheduleSave(); }
 function updateBlock(_, block, field, value) { block[field] = value; scheduleSave(); }
@@ -445,4 +561,14 @@ function toYAML(s) {
 
 /* ── 导出 ── */
 .export-actions { display: flex; gap: 12px; }
+
+/* ── Merge mode ── */
+.char-merge-selected { border: 2px solid #4a5ae0 !important; background: #1a1a3a !important; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { max-width: 420px; }
+.modal-actions { display: flex; gap: 12px; justify-content: center; margin-top: 8px; }
+
+/* ── Delete button ── */
+.btn-char-delete { position: absolute; top: 6px; right: 6px; background: none; border: none; color: #5a5a7a; cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+.btn-char-delete:hover { background: #3a1a1a; color: #e07070; }
 </style>
