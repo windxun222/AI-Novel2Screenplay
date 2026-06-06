@@ -6,10 +6,10 @@
     v-else
     ref="inputEl"
     class="editable-input"
-    :value="modelValue"
     @blur="finishEdit"
     @keyup.enter="finishEdit"
     @keyup.escape="cancelEdit"
+    @input="onInput"
   />
 </template>
 
@@ -25,31 +25,37 @@ const emit = defineEmits(["change"]);
 
 const editing = ref(false);
 const inputEl = ref(null);
-const modelValue = ref(props.value || "");
+// Store the initial value when editing starts
+var initialValue = "";
 
 const displayValue = computed(() => props.value || "");
 
 async function startEdit() {
-  modelValue.value = props.value || "";
+  initialValue = props.value || "";
   editing.value = true;
   await nextTick();
   if (inputEl.value) {
+    inputEl.value.value = initialValue;
     inputEl.value.focus();
     inputEl.value.select();
   }
 }
 
+function onInput(e) {
+  // Track the user's typing in the DOM — no need for a Vue ref
+}
+
 function finishEdit() {
   editing.value = false;
-  const newVal = modelValue.value.trim();
-  if (newVal !== (props.value || "")) {
+  // Read the actual value from the DOM input element
+  var newVal = (inputEl.value?.value || "").trim();
+  if (newVal !== (initialValue || "")) {
     emit("change", newVal || null);
   }
 }
 
 function cancelEdit() {
   editing.value = false;
-  modelValue.value = props.value || "";
 }
 </script>
 
