@@ -1,6 +1,5 @@
-﻿import re
-import yaml
-from typing import Dict, List, Optional, Any, Tuple
+﻿import yaml
+from typing import Dict, List, Optional, Tuple
 from app.models.novel import NovelInput
 from app.models.screenplay import (
     Screenplay, ScreenplayMeta, CharacterRef, Act, Scene,
@@ -120,7 +119,7 @@ class Assembler:
                         changed = True
 
         # Step 3: Fuzzy match (edit distance <= 2 for Chinese)
-        unmatched = [n for n in merged.keys() if False]  # Placeholder, users confirm via UI
+        # Placeholder: fuzzy match handled at UI layer, users confirm via UI
         # Fuzzy match is handled at the UI layer; local assembler only does exact+alias
 
         result = list(merged.values())
@@ -287,7 +286,6 @@ class Assembler:
                     for c in data["characters"]:
                         name = c.get("name", "")
                         personality = c.get("personality")
-                        background = c.get("background")
                         if name and personality:
                             if name not in char_traits:
                                 char_traits[name] = []

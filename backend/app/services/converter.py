@@ -1,10 +1,9 @@
-﻿import json
-import re
+﻿import re
 from typing import List, Optional, Dict, Any
 from app.config import settings
 from app.models.novel import NovelInput, ChapterInput
-from app.models.screenplay import Screenplay, ScreenplayMeta, CharacterRef, Act, Scene, ContinuityWarning
-from app.services.parser import split_chapters, chunk_chapter, needs_chunking
+from app.models.screenplay import Screenplay, ContinuityWarning
+from app.services.parser import chunk_chapter, needs_chunking
 from app.services.ai_service import AIService
 from app.prompts.pre_scan import PRE_SCAN_SYSTEM_PROMPT, PRE_SCAN_USER_TEMPLATE
 from app.prompts.system import SYSTEM_PROMPT, build_chapter_prompt
