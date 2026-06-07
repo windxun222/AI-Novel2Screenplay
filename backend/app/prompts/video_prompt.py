@@ -32,10 +32,12 @@ def build_video_prompt_data(req):
         parts = [name]
         if c.get("age"):
             parts.append(c.get("age"))
-        if c.get("gender"): parts.append({"男": "男性", "女": "女性"}.get(c.get("gender"), ""))
+        if c.get("gender"):
+            parts.append({"男": "男性", "女": "女性"}.get(c.get("gender"), ""))
         if c.get("role"):
             parts.append(c.get("role"))
-        if c.get("personality"): parts.append("性格：" + c.get("personality"))
+        if c.get("personality"):
+            parts.append("性格：" + c.get("personality"))
         char_lines.append("  " + "，".join(p for p in parts if p))
 
     interior = "内景" if req.interior else "外景"
