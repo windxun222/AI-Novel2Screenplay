@@ -9,6 +9,11 @@
 - **中文剧本规范**：输出符合中文影视行业通用格式的结构化剧本
 - **连续性校验**：自动检测角色命名冲突、场景逻辑矛盾，输出警告
 - **可编辑输出**：YAML 格式，可在任何文本编辑器中修改，也支持 Web 编辑器浏览
+- **逐章审查模式**：分步转换，每章独立审查编辑后再继续
+- **角色管理**：角色表增删改合并，ID 自动分配和一致性保护
+- **场景/对白编辑**：Web 端直接增删改场景和对白，自动保存
+- **连续性警告**：动态刷新、一键修复、点击定位到问题场景
+- **AI 视频提示词工坊**：从剧本生成镜头级视频提示词
 - **YAML Schema**：明确定义的剧本数据模型，附带完整设计文档
 
 ## 项目结构
@@ -117,6 +122,11 @@ npm run dev
 |------|------|------|
 | POST | `/api/chapters/parse` | 本地分割章节（不调用 API）|
 | POST | `/api/convert` | 完整转换管线（Pre-scan → 逐章转换 → Assembler）|
+| POST | `/api/convert/pre-scan` | 预扫描：提取角色 + 章概要 |
+| POST | `/api/convert/chapter` | 逐章转换：单章带上下文转换 |
+| POST | `/api/convert/assemble` | 组装：各章 YAML → 完整剧本 |
+| POST | `/api/convert/recheck` | 动态重检连续性警告 |
+| POST | `/api/prompts/generate` | AI 视频提示词生成 |
 | GET  | `/api/schema` | 返回 YAML Schema 定义 |
 
 ## YAML Schema
