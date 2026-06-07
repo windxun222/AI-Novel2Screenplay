@@ -30,9 +30,11 @@ def build_video_prompt_data(req):
     for c in req.characters:
         name = c.get("name", "")
         parts = [name]
-        if c.get("age"): parts.append(c.get("age"))
+        if c.get("age"):
+            parts.append(c.get("age"))
         if c.get("gender"): parts.append({"男": "男性", "女": "女性"}.get(c.get("gender"), ""))
-        if c.get("role"): parts.append(c.get("role"))
+        if c.get("role"):
+            parts.append(c.get("role"))
         if c.get("personality"): parts.append("性格：" + c.get("personality"))
         char_lines.append("  " + "，".join(p for p in parts if p))
 

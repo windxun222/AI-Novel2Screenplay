@@ -1,7 +1,6 @@
-﻿import traceback
-from fastapi import APIRouter, HTTPException, Response
+﻿from fastapi import APIRouter, HTTPException, Response
 from typing import List, Dict, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.models.novel import NovelInput, ChapterInput, ParseRequest
 from app.models.screenplay import Screenplay
