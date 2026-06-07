@@ -1,271 +1,171 @@
-# 架构说明
+﻿# 架构说明
 
-## 一、整体架构
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        前端 (Vue 3 + Vite)                       │
-│  ┌──────────┐  ┌───────────┐  ┌──────────────┐  ┌────────────┐ │
-│  │ HomePage │  │ NovelInput │  │ConvertProgress│  │ScreenplayRes│ │
-│  │          │  │            │  │               │  │ ult        │ │
-│  └──────────┘  └───────────┘  └──────────────┘  └────────────┘ │
-│                      │                                           │
-│              ┌───────┴───────┐                                   │
-│              │  ConvertPage  │  ← 控制器，管理状态与流程             │
-│              └───────┬───────┘                                   │
-│                      │  /api/* （Vite 代理至 localhost:8000）       │
-└──────────────────────┼──────────────────────────────────────────┘
-                       │
-┌──────────────────────┼──────────────────────────────────────────┐
-│                后端 (FastAPI + Uvicorn)                          │
-│              ┌───────┴───────┐                                   │
-│              │   routes.py   │  ← API 路由层                      │
-│              └───────┬───────┘                                   │
-│        ┌─────────────┼─────────────┐                             │
-│  ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐                      │
-│  │ converter │ │ assembler │ │ai_service│                       │
-│  │   .py     │ │   .py     │ │   .py    │                       │
-│  └─────┬─────┘ └─────┬─────┘ └─────┬─────┘                      │
-│        │             │             │                              │
-│  ┌─────┴─────┐ ┌─────┴─────┐ ┌─────┴─────┐                      │
-│  │ ContextHub│ │ 角色合并   │ │ DeepSeek │                       │
-│  │ 上下文共享 │ │ 场景拼接   │ │   API    │                       │
-│  │           │ │ 连续性校验 │ │          │                       │
-│  └───────────┘ └───────────┘ └──────────┘                       │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## 二、转换管线详解
-
-### Phase 0：Pre-Scan（预扫描）
-
-**目标**：用一次轻量级 AI 调用，构建全局上下文。
+## 一、系统概览
 
 ```
-输入：小说标题 + 所有章节的前 2000 字摘要
-  │
-  ▼
-AI 调用（temperature=0.1，max_tokens=2048）
-  │
-  ▼
-输出：全局角色清单 + 每章概要
-  │
-  ▼
-存储到 ContextHub：
-  - characters[]      (全局角色列表)
-  - chapter_summaries{} (章节索引 → 概要)
+前端 (Vue 3 + Vite)
+  /api/* 代理 → 后端 (FastAPI + Uvicorn)
+    routes.py → converter.py → assembler.py → ai_service.py → DeepSeek API
 ```
 
-**设计原因**：只发送一次预扫描请求（而非每章都扫），减少 API 调用次数和成本。
+## 二、转换管线
+
+### 两种工作模式
+
+| 模式 | 流程 | 适用场景 |
+|------|------|---------|
+| 一次性全量 | 预扫描 → 所有章节 → 组装 | 快速生成初稿 |
+| 逐章审查 | 预扫描 → 角色审核 → 逐章转换 → 组装 | 精细控制质量 |
+
+### Phase 0：预扫描（Pre-Scan）
+
+一次轻量 AI 调用，构建全局上下文。
+
+- 发送每章完整文本，不再截断
+- AI 返回：角色列表（姓名、别名、角色定位、性格、首次出场章节）+ 每章概要
+- 代码强制分配稳定 ID：char_001、char_002...
+- 角色外貌由性格关键词推断（如"沉稳"→"深色长袍，神色平静"）
 
 ### Phase 1：逐章转换
 
-**目标**：每章独立调用 DeepSeek，注入累积的上下文。
+- 每章独立调用 DeepSeek
+- 上下文注入：已有角色表（含 ID）+ 前情概要
+- **温度 0.1**：最小化幻觉
+- **反幻觉规则**：系统提示词要求严格忠于原文，示例用占位符
+- **ID 后处理**：按名字匹配，将 AI 自创的 character_id 重映射为 pre-scan 稳定 ID
+
+### Phase 2：组装（Assembler）
+
+- 按名字合并角色（pre-scan ID 优先于章节 YAML ID）
+- 从章节 YAML 解析场景
+- 全局场景重编号
+- 组装后 ID 重映射：遍历所有对白，对齐 character_id 到角色表
+- 运行 4 项连续性检查
+- ID 去重：不同角色共享同一 ID 时自动 renumber
+- 角色排序：主角 → 配角 → 反派 → 龙套
+
+### 逐章模式完整流程
 
 ```
-对于每一章：
-  │
-  ├── 构造提示词：
-  │   ├── 系统提示词（剧本格式规范）
-  │   ├── 已有角色表（ContextHub.characters → YAML）
-  │   ├── 前情概要（ContextHub.get_summary_context(chapter.index)）
-  │   └── 本章正文
-  │
-  ▼
-  AI 调用（temperature=0.3，max_tokens=4096）
-  │
-  ▼
-  YAML 响应清洗（去除 markdown 代码块）
-  │
-  ▼
-  更新 ContextHub：
-  ├── 新增角色追加到 characters[]
-  └── 原始 YAML 存入 chapter_yamls{}
+用户输入文本
+  → parseChapters（解析章节）
+  → preScan（预扫描 + 分配稳定 ID）
+  → 角色审核页面（可增删改合并，ID 补位递增）
+  → 确认角色表
+  → convertChapter（逐章转换，每章可折叠、内容可编辑）
+  → assembleStep（生成剧本，支持部分完成）
+  → 进度自动持久化到工作区 JSON
 ```
 
-**超长章节处理**：如果章节超过 `MAX_CHAPTER_CHARS`（默认 8000），`chunk_chapter()` 按段落边界分割为多段，每段独立转换后拼接。
+### 部分完成 & 断点续转
 
-### Phase 2：Assembler（组装与校验）
+- 任意数量章节转换后即可生成剧本，未转换章节自动跳过
+- 后续可通过"追加新章节"导入更多内容
+- Workspace 模型含 step_results 字段，每章转换后自动保存
+- 重新打开工作区自动恢复逐章状态
 
-**目标**：合并所有逐章产出，重编号，运行连续性检查。
+## 三、角色 ID 管理系统
 
-```
-输入：所有章节的原始 YAML + ContextHub
-  │
-  ├── ① 角色合并（_merge_characters）
-  │   ├── Step 1: 精确姓名匹配
-  │   ├── Step 2: 别名匹配（迭代解析）
-  │   └── Step 3: 模糊匹配（委托 UI 层）
-  │
-  ├── ② 场景解析（_parse_scenes）
-  │   └── 每章 YAML → ContentBlock[] → Scene 列表
-  │
-  ├── ③ 全局重编号（scene.number = 1, 2, 3...）
-  │
-  ├── ④ 连续性检查
-  │   ├── 孤立角色检查
-  │   ├── 地点内外景一致性
-  │   ├── 场景间转场标记
-  │   └── 角色性格描述一致性
-  │
-  ├── ⑤ 构建 Act（按章节分组场景）
-  │
-  ▼
-输出：完整的 Screenplay Pydantic 模型
-```
+**核心原则**：角色 ID 由系统层保证一致性，不依赖 AI 的随机行为。
 
-## 三、数据模型设计
-
-```
-Screenplay
-├── metadata: ScreenplayMeta
-│   ├── title, source, author
-│   ├── adapter ("AI Novel2Screenplay")
-│   ├── created_at
-│   ├── chapter_count
-│   └── version
-├── characters: CharacterRef[]
-│   ├── id (char_XXX)
-│   ├── name
-│   ├── aliases[]
-│   ├── role, gender, age
-│   ├── personality, background
-│   └── notes
-├── acts: Act[]
-│   ├── id (act_X)
-│   ├── title, summary
-│   └── scenes: Scene[]
-│       ├── id (scene_XXX)
-│       ├── number (全局递增)
-│       ├── heading, location, time, interior
-│       ├── summary
-│       ├── chapter_index
-│       └── content: ContentBlock[]
-│           ├── type (action|dialogue|narration|transition)
-│           ├── description
-│           ├── character_id (对白时引用 CharacterRef.id)
-│           ├── line (对白台词)
-│           ├── delivery (语气指示)
-│           └── transition_type
-└── warnings: ContinuityWarning[]
-    ├── level (info|warning|error)
-    ├── type
-    ├── message
-    └── locations[]
-```
-
-## 四、ContextHub 设计
-
-`ContextHub` 是跨章节共享状态的容器，作为 `Converter` 的状态属性存在：
-
-| 字段 | 类型 | 用途 |
+| 阶段 | 操作 | 文件 |
 |------|------|------|
-| `characters` | `List[dict]` | 累积的全局角色表 |
-| `chapter_summaries` | `Dict[int, str]` | 章节索引 → AI 生成的概要 |
-| `chapter_yamls` | `Dict[int, str]` | 章节索引 → 原始 AI 输出 YAML |
-| `continuity_warnings` | `List[ContinuityWarning]` | 转换过程中收集的警告 |
+| 预扫描后 | 强制分配 char_001~char_N | converter.py |
+| 上下文注入 | get_character_context_yaml() 输出含 id 字段 | converter.py |
+| 逐章转换后 | 按名字匹配，将 AI 自创 ID 重映射为 pre-scan ID | routes.py |
+| 角色更新 | update_characters() 遇到已有角色跳过 ID | converter.py |
+| Assembler 合并 | pre-scan 角色优先于章节 YAML 角色 | assembler.py |
+| Assembler 去重 | 不同名字共享同一 ID 时重新编号 | assembler.py |
+| 前端合并 | doMerge() 自动重映射场景中所有对白引用 | ScreenplayResult.vue |
 
-**设计原因**：逐章转换需要前几章的角色和剧情信息。ContextHub 是临时的内存状态，最终由 Assembler 消费并清零。
+## 四、动态连续性警告
 
-## 五、AI 服务封装
+4 项检查：orphan_character、location_consistency、scene_gaps、character_description_changed。
 
-`AIService` 是对 DeepSeek API 的薄封装：
-
-- 使用 OpenAI Python SDK（兼容协议）
-- `chat(system_prompt, user_prompt, temperature, max_tokens)` → 返回原始文本
-- `is_available()` → 检查 API Key 是否已配置
-- 错误处理：`APIError` → `RuntimeError`（统一异常类型）
-
-**可替换性**：只需修改 `base_url` + `api_key` + `model` 三个配置即可切换到任何兼容 OpenAI 协议的 API（如 OpenAI、Moonshot、Zhipu 等）。
-
-## 六、前端组件通信
-
-```
-App.vue
-├── Header（导航栏）
-├── router-view
-│   ├── HomePage.vue    （静态内容，无状态管理）
-│   └── ConvertPage.vue （唯一有状态的控制器视图）
-│       ├── NovelInput.vue
-│       │   └── emit("submit", {title, author, text})
-│       ├── ConversionProgress.vue
-│       │   └── props: {phase, chapters, chapterResults}
-│       └── ScreenplayResult.vue
-│           └── props: {screenplay, error, warnings, novel}
-└── Footer
-```
-
-**数据流**：单向数据流，父组件通过 props 向子组件传递数据，子组件通过 emit 向父组件通知事件。不使用集中式状态管理（如 Pinia），因为当前只有 ConvertPage 一个页面需要管理复杂状态。
-
-## 七、API 接口设计
-
-| 方法 | 路径 | 说明 | 返回类型 |
-|------|------|------|---------|
-| GET | `/` | 健康检查 | JSON |
-| POST | `/api/chapters/parse` | 本地分割章节 | JSON |
-| POST | `/api/convert` | 完整转换管线（JSON 输出）| JSON（Screenplay） |
-| POST | `/api/convert/yaml` | 完整转换管线（YAML 输出）| text/yaml |
-| GET | `/api/schema` | 剧本 Schema 定义 | JSON |
-
-## 八、关键技术决策
-
-| 决策 | 理由 |
+| 功能 | 说明 |
 |------|------|
-| FastAPI 而非 Flask | 原生异步支持、自动 OpenAPI 文档、Pydantic 集成 |
-| Vue 3 Composition API | 更好的 TypeScript 支持、逻辑复用、Tree-shaking |
-| Vite 而非 Webpack | 更快的冷启动和 HMR，原生 ESM |
-| YAML 作为中间格式 | AI 原生支持 YAML 输出，人类可读，无需 JSON 转义 |
-| Pydantic v2 | 更快的验证速度，更好的 discriminated union 支持 |
-| 逐章而非全文转换 | 避免上下文窗口溢出，支持超长小说 |
+| 刷新重检 | 编辑剧本后重新运行全部检查（POST /api/convert/recheck） |
+| 点击定位 | 点击警告消息平滑滚动到对应场景，高亮闪烁 1.5 秒 |
+| 一键修复 | missing_transition（补"切至"）、orphan_character（加入角色表）、inconsistent_location（统一内外景） |
 
-## 九、目录结构
+## 五、API 端点（11 个）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | / | 健康检查 |
+| POST | /api/chapters/parse | 本地章节分割 |
+| POST | /api/convert | 一次性全量转换（JSON） |
+| POST | /api/convert/yaml | 一次性全量转换（YAML 下载） |
+| POST | /api/convert/pre-scan | 预扫描：提取角色 + 章概要 |
+| POST | /api/convert/chapter | 逐章转换（含上下文 + ID 重映射） |
+| POST | /api/convert/assemble | 组装各章 YAML → 完整剧本 |
+| POST | /api/convert/recheck | 重新运行连续性检查 |
+| POST | /api/prompts/generate | AI 视频提示词生成 |
+| GET | /api/schema | 剧本 YAML Schema |
+| CRUD | /api/workspaces/* | 工作区管理 |
+
+## 六、前端架构
+
+### 页面
+
+| 页面 | 路由 | 功能 |
+|------|------|------|
+| HomePage | / | 产品介绍 + 功能卡片 |
+| ConvertPage | /convert | 核心转换控制器（全量 & 逐章） |
+| WorkspacesPage | /workspaces | 工作区列表 + 导出/导入 JSON |
+| PromptsPage | /prompts | AI 视频提示词工坊 |
+
+### 核心组件
+
+| 组件 | 用途 |
+|------|------|
+| NovelInput | 文本输入 + 文件上传 |
+| ConversionProgress | 全量模式进度条 |
+| ScreenplayResult | 完整结果展示 + 场景/对白增删 + 角色增删合并 + 内联编辑 |
+| EditableField | 点击编辑字段（读取 DOM 真实值） |
+
+### 数据流
+
+父子组件通过 props / emit 通信。逐章状态通过 useWorkspace 单例跨组件共享。
+
+## 七、工作区持久化
+
+- JSON 文件存储在 /workspaces/ 目录
+- Workspace 模型字段：raw_text、chapters、screenplay、step_results、status
+- step_results 支持跨会话断点续转
+- 导出/导入通过 JSON 文件下载/上传
+
+## 八、幻觉预防措施
+
+| 措施 | 说明 |
+|------|------|
+| 系统提示词 | 明确要求严格忠于原文 + 反幻觉检查清单 |
+| 示例 YAML | 使用"[主角名]"等占位符，不出现具体名称 |
+| 温度 | 逐章转换 0.3 → 0.1 |
+| 后处理 | 逐章 API 和组装 API 均含 ID 重映射 |
+| 字符串清洗 | _sanitize_str / _sanitize_char_dict 处理 AI 返回的非字符串值 |
+
+## 九、项目目录结构
 
 ```
 7Cow/
 ├── docs/
-│   ├── screenplay-schema.md   # YAML Schema 定义 + 设计原理
-│   └── architecture.md        # 本文档
+│   ├── architecture.md
+│   └── screenplay-schema.md
 ├── backend/
-│   ├── app/
-│   │   ├── main.py            # FastAPI 入口 + CORS
-│   │   ├── config.py          # 环境配置（pydantic-settings）
-│   │   ├── models/            # Pydantic 数据模型
-│   │   │   ├── novel.py       # NovelInput, ChapterInput
-│   │   │   └── screenplay.py  # Screenplay + 子模型
-│   │   ├── services/          # 业务逻辑
-│   │   │   ├── parser.py      # 章节分割
-│   │   │   ├── ai_service.py  # AI API 封装
-│   │   │   ├── converter.py   # 转换编排 + ContextHub
-│   │   │   └── assembler.py   # 组装 + 校验
-│   │   ├── prompts/           # AI 提示词模板
-│   │   │   ├── pre_scan.py
-│   │   │   └── system.py
-│   │   ├── api/
-│   │   │   └── routes.py      # API 路由
-│   │   └── schemas/
-│   │       └── screenplay_example.yaml
-│   ├── tests/
-│   │   ├── test_parser.py
-│   │   ├── test_assembler.py
-│   │   └── fixtures/
-│   └── requirements.txt
+│   └── app/
+│       ├── main.py
+│       ├── config.py
+│       ├── models/
+│       ├── services/
+│       ├── prompts/
+│       └── api/
 ├── frontend/
-│   ├── src/
-│   │   ├── main.js
-│   │   ├── App.vue
-│   │   ├── router/
-│   │   ├── views/
-│   │   ├── components/
-│   │   ├── api/client.js
-│   │   └── styles/main.css
-│   ├── index.html
-│   ├── package.json
-│   └── vite.config.js
-├── .github/
-│   ├── pull_request_template.md
-│   └── workflows/ci.yml
-├── .env.example
-├── .gitignore
-├── .editorconfig
-└── README.md
+│   └── src/
+│       ├── views/
+│       ├── components/
+│       ├── composables/
+│       ├── api/client.js
+│       └── router/index.js
+└── workspaces/
 ```
