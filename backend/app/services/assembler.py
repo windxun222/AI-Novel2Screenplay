@@ -309,6 +309,17 @@ class Assembler:
         return warnings
 
 
+def _sanitize_str(val):
+    """Ensure a value is a string or None. Lists, dicts, etc. become empty string or None."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val
+    if isinstance(val, list):
+        return ", ".join(str(x) for x in val if x) or None
+    return str(val) if val else None
+
+
 def _to_char_ref(d: dict, default_id_suffix: int = 0) -> CharacterRef:
     """Convert a dict to CharacterRef. If default_id_suffix is provided, generate a unique ID."""
     char_id = d.get("id")
@@ -318,10 +329,10 @@ def _to_char_ref(d: dict, default_id_suffix: int = 0) -> CharacterRef:
         id=char_id,
         name=d.get("name", "未知"),
         aliases=d.get("aliases") or [],
-        role=d.get("role"),
-        gender=d.get("gender"),
-        age=d.get("age"),
-        personality=d.get("personality"),
-        background=d.get("background"),
-        notes=d.get("notes"),
+        role=_sanitize_str(d.get("role")),
+        gender=_sanitize_str(d.get("gender")),
+        age=_sanitize_str(d.get("age")),
+        personality=_sanitize_str(d.get("personality")),
+        background=_sanitize_str(d.get("background")),
+        notes=_sanitize_str(d.get("notes")),
     )

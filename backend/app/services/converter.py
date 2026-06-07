@@ -162,6 +162,19 @@ class Converter:
         return assembler.assemble(novel, chapter_yamls, self.context)
 
 
+def _sanitize_char_dict(c: dict):
+    """Ensure string fields in a character dict are proper strings, not lists."""
+    for field in ("role", "gender", "age", "personality", "background", "notes"):
+        val = c.get(field)
+        if val is not None and not isinstance(val, str):
+            if isinstance(val, list):
+                c[field] = ", ".join(str(x) for x in val if x) or ""
+            else:
+                c[field] = str(val) if val else ""
+    if not isinstance(c.get("aliases"), list):
+        c["aliases"] = []
+
+
 def _extract_yaml_block(text: str) -> str:
     """Extract YAML content from a response that may contain markdown fences."""
     match = re.search(r"```(?:yaml)?\s*\n(.+?)\n```", text, re.DOTALL)
