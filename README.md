@@ -1,6 +1,7 @@
 ﻿# AI Novel2Screenplay —— AI 小说转剧本工具
 
 将小说文本自动转换为结构化中文剧本（YAML 格式），降低小说改编剧本的门槛。
+功能演示视频地址  https://www.bilibili.com/video/BV1z3E46sENF
 
 ## 功能
 
