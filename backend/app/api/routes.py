@@ -1,6 +1,7 @@
-﻿from fastapi import APIRouter, HTTPException, Response
-from typing import List, Dict
-from pydantic import BaseModel
+﻿import traceback
+from fastapi import APIRouter, HTTPException, Response
+from typing import List, Dict, Optional
+from pydantic import BaseModel, Field
 
 from app.models.novel import NovelInput, ChapterInput, ParseRequest
 from app.models.screenplay import Screenplay
@@ -330,6 +331,38 @@ async def assemble_chapters(req: AssembleRequest):
     return result
 
 
+
+
+# -- AI ??????? --
+
+class ScenePromptRequest(BaseModel):
+    heading: str = ""
+    location: str = ""
+    time: str = ""
+    interior: bool = True
+    summary: str = ""
+    actions: Optional[list] = None
+    dialogue_lines: Optional[list] = None
+    characters: Optional[list] = None
+    style: str = "????"
+
+
+@router.post("/prompts/generate")
+async def generate_prompt(req: ScenePromptRequest):
+    from app.prompts.video_prompt import VIDEO_SYSTEM_PROMPT, build_video_prompt_data
+    try:
+        ai = AIService()
+        if not ai.is_available():
+            raise HTTPException(status_code=503, detail='DeepSeek API not configured')
+        sd = build_video_prompt_data(req)
+        raw = ai.chat(VIDEO_SYSTEM_PROMPT, sd, temperature=0.1, max_tokens=1024)
+        if not raw:
+            raise HTTPException(status_code=500, detail='AI returned empty')
+        return {'characters': [], 'scene_prompt_cn': raw.strip()[:500], 'scene_prompt_en': ''}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'Prompt error: {type(e).__name__}: {e}')
 @router.get("/schema")
 async def get_schema():
     """Return the screenplay YAML schema as JSON."""
