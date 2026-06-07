@@ -1,6 +1,6 @@
 ﻿<template>
   <span v-if="!editing" class="editable" :class="{ empty: !displayValue }" @click="startEdit" :title="label || '点击编辑'">
-    {{ displayValue || (label ? '点击添加' + label : '点击编辑') }}
+    {{ displayValue || '—' }}
   </span>
   <input
     v-else

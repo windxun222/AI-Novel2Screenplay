@@ -177,6 +177,27 @@
         </div>
       </div>
 
+      <!-- ── 追加新章节 ── -->
+      <div v-if="(stepPhase === 'prescan-done' || stepPhase === 'converting') && stepChapters.length > 0" class="append-section" style="margin-top:20px;padding-top:16px;border-top:1px dashed #2a2a4a">
+        <button class="btn btn-sm btn-secondary" @click="showAppendInput = !showAppendInput">
+          {{ showAppendInput ? '取消追加' : '+ 追加新章节' }}
+        </button>
+        <div v-if="showAppendInput" style="margin-top:12px">
+          <textarea
+            v-model="appendText"
+            class="append-textarea"
+            placeholder="在此粘贴新的章节内容（例如第4-5章）……&#10;&#10;支持与初始输入相同的章节标题格式：第X章 / 第一章 / Chapter X"
+            rows="8"
+          ></textarea>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+            <button class="btn btn-primary" @click="doAppendChapters" :disabled="!appendText.trim()">
+              解析并追加到项目
+            </button>
+            <span style="font-size:12px;color:#6a6a8a">{{ appendText.length }} 字</span>
+          </div>
+        </div>
+      </div>
+
       <!-- ── 完成按钮（至少一章转换完毕即可生成当前进度剧本）── -->
       <div v-if="anyChapterDone" class="step-finish" style="margin-top:20px;text-align:center">
         <button class="btn btn-primary btn-lg" @click="finishStepConversion" :disabled="converting">
@@ -236,6 +257,8 @@ const stepResults = ref({});          // { chapterIndex: { raw_yaml, scenes, new
 const preScanChars = ref([]);          // 审核中的角色表
 const preScanSummaries = ref({});      // AI 生成的章概要
 const expandedChapters = ref({});
+const showAppendInput = ref(false);
+const appendText = ref("");
 function isReviewEditing(c, field) { return c[field] !== undefined && c[field] !== null && c[field] !== ''; }      // 展开/折叠状态
 
 const allChaptersDone = computed(() => {
@@ -355,6 +378,49 @@ async function handleSubmit(data) {
   } catch (e) {
     error.value = e.message || '转换过程出错'; phase.value = 'error'; ws.state.status = 'error'; await ws.save().catch(() => {});
   } finally { converting.value = false; }
+}
+
+// ── Append new chapters ──
+async function doAppendChapters() {
+  var raw = appendText.value.trim();
+  if (!raw) return;
+  
+  try {
+    // Parse the new text
+    var parsed = await parseChapters(raw, ws.state.title, ws.state.author);
+    var newChapters = parsed.chapters || [];
+    if (!newChapters.length) {
+      error.value = '未能从文本中解析出章节，请确保使用正确的章节标题格式（如"第X章"）';
+      return;
+    }
+    
+    // Find the next chapter index
+    var maxIdx = 0;
+    stepChapters.value.forEach(function(ch) {
+      var idx = ch.index || 0;
+      if (idx > maxIdx) maxIdx = idx;
+    });
+    
+    // Append new chapters with adjusted indices
+    newChapters.forEach(function(ch, i) {
+      stepChapters.value.push({
+        index: maxIdx + i + 1,
+        title: ch.title || ('第' + (maxIdx + i + 1) + '章'),
+        text: ch.text || '',
+      });
+    });
+    
+    // Clear input
+    appendText.value = '';
+    showAppendInput.value = false;
+    
+    // Save to workspace
+    ws.state.chapters = stepChapters.value;
+    ws.touch();
+    await ws.save().catch(function() {});
+  } catch(e) {
+    error.value = e.message || '章节解析失败';
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -637,4 +703,21 @@ async function handleSave() {
 .compact-role { flex: 0 0 100px; }
 .compact-del { background: none; border: none; color: #5a5a7a; font-size: 14px; cursor: pointer; padding: 0 4px; }
 .compact-del:hover { color: #e07070; }
+
+/* ── Append section ── */
+.append-textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  line-height: 1.7;
+  font-size: 13px;
+  padding: 10px;
+  background: #12121e;
+  border: 1px solid #2a2a4a;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-family: inherit;
+  outline: none;
+}
+.append-textarea:focus { border-color: #4a5ae0; }
 </style>

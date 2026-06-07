@@ -1,10 +1,9 @@
-﻿import json
-import re
+﻿import re
 from typing import List, Optional, Dict, Any
 from app.config import settings
 from app.models.novel import NovelInput, ChapterInput
-from app.models.screenplay import Screenplay, ScreenplayMeta, CharacterRef, Act, Scene, ContinuityWarning
-from app.services.parser import split_chapters, chunk_chapter, needs_chunking
+from app.models.screenplay import Screenplay, ContinuityWarning
+from app.services.parser import chunk_chapter, needs_chunking
 from app.services.ai_service import AIService
 from app.prompts.pre_scan import PRE_SCAN_SYSTEM_PROMPT, PRE_SCAN_USER_TEMPLATE
 from app.prompts.system import SYSTEM_PROMPT, build_chapter_prompt
@@ -34,10 +33,24 @@ class ContextHub:
             pass
 
     def get_character_context_yaml(self) -> str:
-        """Serialize current character table to YAML string for prompt injection."""
+        """Serialize current character table to YAML string for prompt injection.
+        Includes id if present, plus key fields to help AI match characters."""
         if not self.characters:
             return ""
-        return yaml.dump({"characters": self.characters}, allow_unicode=True, default_flow_style=False)
+        clean = []
+        for c in self.characters:
+            entry = {}
+            if c.get("id"):
+                entry["id"] = c["id"]
+            entry["name"] = c.get("name", "")
+            if c.get("aliases"):
+                entry["aliases"] = c["aliases"]
+            if c.get("role"):
+                entry["role"] = c["role"]
+            if c.get("personality"):
+                entry["personality"] = c["personality"]
+            clean.append(entry)
+        return yaml.dump({"characters": clean}, allow_unicode=True, default_flow_style=False)
 
     def get_summary_context(self, up_to_chapter: int) -> str:
         """Build summary context string for prompt injection."""
@@ -64,7 +77,7 @@ class Converter:
     def pre_scan(self, novel: NovelInput) -> bool:
         """Phase 0: Lightweight pre-scan to extract character names and chapter summaries."""
         chapter_texts = "\n\n=====\n\n".join(
-            f"第{c.index}章：{c.text[:2000]}" for c in novel.chapters
+            f"第{c.index}章：{c.text}" for c in novel.chapters
         )
         user_msg = PRE_SCAN_USER_TEMPLATE.format(
             title=novel.title,
@@ -87,6 +100,10 @@ class Converter:
                     existing = [x for x in self.context.characters if x.get("name") == c.get("name")]
                     if not existing:
                         self.context.characters.append(c)
+            # Assign stable IDs to all characters
+            for idx, ch in enumerate(self.context.characters):
+                if not ch.get("id"):
+                    ch["id"] = f"char_{idx + 1:03d}"
             return True
         except yaml.YAMLError:
             return False
@@ -97,7 +114,7 @@ class Converter:
         summary_ctx = self.context.get_summary_context(chapter.index)
 
         user_prompt = build_chapter_prompt(chapter.index, chapter.text, char_ctx, summary_ctx)
-        raw = self.ai.chat(SYSTEM_PROMPT, user_prompt, temperature=0.3,
+        raw = self.ai.chat(SYSTEM_PROMPT, user_prompt, temperature=0.1,
                            max_tokens=settings.chapter_max_tokens)
         if not raw:
             return None
@@ -142,6 +159,19 @@ class Converter:
         from app.services.assembler import Assembler
         assembler = Assembler()
         return assembler.assemble(novel, chapter_yamls, self.context)
+
+
+def _sanitize_char_dict(c: dict):
+    """Ensure string fields in a character dict are proper strings, not lists."""
+    for field in ("role", "gender", "age", "personality", "background", "notes"):
+        val = c.get(field)
+        if val is not None and not isinstance(val, str):
+            if isinstance(val, list):
+                c[field] = ", ".join(str(x) for x in val if x) or ""
+            else:
+                c[field] = str(val) if val else ""
+    if not isinstance(c.get("aliases"), list):
+        c["aliases"] = []
 
 
 def _extract_yaml_block(text: str) -> str:

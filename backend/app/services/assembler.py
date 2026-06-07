@@ -1,6 +1,5 @@
-﻿import re
-import yaml
-from typing import Dict, List, Optional, Any, Tuple
+﻿import yaml
+from typing import Dict, List, Optional, Tuple
 from app.models.novel import NovelInput
 from app.models.screenplay import (
     Screenplay, ScreenplayMeta, CharacterRef, Act, Scene,
@@ -65,19 +64,23 @@ class Assembler:
 
         # Collect all character entries from all chapters
         all_entries = []
+
+        # Include pre-scan characters FIRST so their IDs take priority over AI-generated ones
+        for pc in context.characters:
+            if pc.get("name"):
+                all_entries.append(dict(pc))
+
+        # Then add chapter YAML characters (same name ? merge into existing, different name ? add)
         for ch_yaml in chapter_yamls.values():
             try:
                 data = yaml.safe_load(ch_yaml)
                 if data and "characters" in data:
-                    all_entries.extend(data["characters"])
+                    for c in data["characters"]:
+                        existing = [e for e in all_entries if e.get("name") == c.get("name")]
+                        if not existing:
+                            all_entries.append(c)
             except yaml.YAMLError:
                 pass
-
-        # Also include pre-scan characters
-        for pc in context.characters:
-            existing = [e for e in all_entries if e.get("name") == pc.get("name")]
-            if not existing:
-                all_entries.append(pc)
 
         # Step 1: Exact name match
         # Track a counter for generating unique IDs for entries without one
@@ -116,10 +119,24 @@ class Assembler:
                         changed = True
 
         # Step 3: Fuzzy match (edit distance <= 2 for Chinese)
-        unmatched = [n for n in merged.keys() if False]  # Placeholder, users confirm via UI
+        # Placeholder: fuzzy match handled at UI layer, users confirm via UI
         # Fuzzy match is handled at the UI layer; local assembler only does exact+alias
 
-        return list(merged.values())
+        result = list(merged.values())
+
+        # Ensure unique IDs ? if two different characters share the same ID, reassign
+        seen_ids = set()
+        for c in result:
+            if c.id in seen_ids:
+                # Find a new unique ID
+                for n in range(1, 999):
+                    new_id = f"char_{n:03d}"
+                    if new_id not in seen_ids:
+                        c.id = new_id
+                        break
+            seen_ids.add(c.id)
+
+        return result
 
     def _merge_fields(self, target: CharacterRef, source: CharacterRef):
         """Merge source into target, keeping target's values as authoritative."""
@@ -269,7 +286,6 @@ class Assembler:
                     for c in data["characters"]:
                         name = c.get("name", "")
                         personality = c.get("personality")
-                        background = c.get("background")
                         if name and personality:
                             if name not in char_traits:
                                 char_traits[name] = []
@@ -291,6 +307,17 @@ class Assembler:
         return warnings
 
 
+def _sanitize_str(val):
+    """Ensure a value is a string or None. Lists, dicts, etc. become empty string or None."""
+    if val is None:
+        return None
+    if isinstance(val, str):
+        return val
+    if isinstance(val, list):
+        return ", ".join(str(x) for x in val if x) or None
+    return str(val) if val else None
+
+
 def _to_char_ref(d: dict, default_id_suffix: int = 0) -> CharacterRef:
     """Convert a dict to CharacterRef. If default_id_suffix is provided, generate a unique ID."""
     char_id = d.get("id")
@@ -300,10 +327,10 @@ def _to_char_ref(d: dict, default_id_suffix: int = 0) -> CharacterRef:
         id=char_id,
         name=d.get("name", "未知"),
         aliases=d.get("aliases") or [],
-        role=d.get("role"),
-        gender=d.get("gender"),
-        age=d.get("age"),
-        personality=d.get("personality"),
-        background=d.get("background"),
-        notes=d.get("notes"),
+        role=_sanitize_str(d.get("role")),
+        gender=_sanitize_str(d.get("gender")),
+        age=_sanitize_str(d.get("age")),
+        personality=_sanitize_str(d.get("personality")),
+        background=_sanitize_str(d.get("background")),
+        notes=_sanitize_str(d.get("notes")),
     )

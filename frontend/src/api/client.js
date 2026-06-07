@@ -90,3 +90,11 @@ export async function deleteWorkspace(id) {
     method: "DELETE",
   });
 }
+
+
+export async function recheckWarnings(screenplay) {
+  return request("/convert/recheck", {
+    method: "POST",
+    body: JSON.stringify(screenplay),
+  });
+}

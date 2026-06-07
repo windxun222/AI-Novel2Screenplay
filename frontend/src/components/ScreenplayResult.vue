@@ -11,6 +11,7 @@
       <div v-if="warnings.length" class="result-warnings card">
         <h3 class="section-title" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <span>连续性警告</span>
+          <button class="btn btn-sm btn-secondary" @click="doRecheck" style="font-size:11px">🔄 刷新警告</button>
           <span class="filter-chips">
             <button class="filter-chip" :class="{ active: warnFilter === 'all' }" @click="warnFilter = 'all'">全部 {{ warnCounts.all }}</button>
             <button class="filter-chip info" :class="{ active: warnFilter === 'info' }" @click="warnFilter = 'info'">提示 {{ warnCounts.info }}</button>
@@ -20,8 +21,11 @@
         </h3>
         <div v-for="(w, i) in filteredWarnings" :key="i" class="warning-item" :class="'warn-' + w.level">
           <span class="warn-level">{{ warnLabel(w.level) }}</span>
-          <span class="warn-msg">{{ w.message }}</span>
-          <span v-if="w.locations?.length" class="warn-locs">场景：{{ w.locations.join(", ") }}</span>
+          <span class="warn-msg" style="cursor:pointer" @click="locateScene(w)" :title="'点击定位到场景'">{{ w.message }}</span>
+          <span v-if="w.locations?.length" class="warn-locs">
+            <span v-for="(loc, li) in w.locations" :key="li" class="warn-loc-link" @click="locateSceneById(loc)">{{ loc }}</span>
+          </span>
+          <button class="btn-fix" @click="applyFix(w)" :title="getFixHint(w.type)">🔧 一键处理</button>
         </div>
       </div>
 
@@ -73,7 +77,7 @@
         <div v-for="act in screenplay.acts" :key="act.id" class="act-block">
           <h4 class="act-title"><EditableField :value="act.title" @change="(v) => updateAct(act, 'title', v)" /></h4>
 
-          <div v-for="(scene, sIdx) in act.scenes" :key="scene.id" class="scene-block">
+          <div v-for="(scene, sIdx) in act.scenes" :key="scene.id" :id="scene.id" class="scene-block">
             <button class="btn-scene-delete" @click="deleteScene(act, sIdx)" title="删除场景">&times;</button>
             <div class="scene-heading"><EditableField :value="scene.heading" @change="(v) => updateScene(scene, 'heading', v)" /></div>
             <div class="scene-meta">
@@ -174,6 +178,7 @@
 import { ref, computed, reactive } from "vue";
 import EditableField from "./EditableField.vue";
 import { useWorkspace } from "../composables/useWorkspace.js";
+import { recheckWarnings } from "../api/client.js";
 
 const props = defineProps({ screenplay: Object, error: String, warnings: Array });
 const ws = useWorkspace();
@@ -189,13 +194,13 @@ function getCharName(id) { return charMap.value[id] || id || "未知"; }
 // ── Warning filter ──
 const warnFilter = ref("all");
 const warnCounts = computed(() => {
-  var all = (props.warnings || []).length, info = 0, warning = 0, error = 0;
-  (props.warnings || []).forEach(w => { if (w.level === 'info') info++; else if (w.level === 'warning') warning++; else error++; });
+  var all = effectiveWarnings.value.length, info = 0, warning = 0, error = 0;
+  effectiveWarnings.value.forEach(function(w) { if (w.level === 'info') info++; else if (w.level === 'warning') warning++; else error++; });
   return { all, info, warning, error };
 });
 const filteredWarnings = computed(() => {
-  if (warnFilter.value === 'all') return props.warnings || [];
-  return (props.warnings || []).filter(w => w.level === warnFilter.value);
+  if (warnFilter.value === 'all') return effectiveWarnings.value;
+  return effectiveWarnings.value.filter(function(w) { return w.level === warnFilter.value; });
 });
 function warnLabel(level) {
   const labels = { info: "提示", warning: "警告", error: "错误" };
@@ -227,6 +232,110 @@ async function scheduleSave() {
     console.error('Save failed:', e);
   }
 }
+
+// ── Dynamic warnings ──
+var dynamicWarnings = ref(null);
+var effectiveWarnings = computed(function() {
+  return dynamicWarnings.value || props.warnings || [];
+});
+
+async function doRecheck() {
+  if (!props.screenplay) return;
+  try {
+    var resp = await recheckWarnings(props.screenplay);
+    dynamicWarnings.value = resp.warnings || [];
+    // Also update the screenplay warnings in ws state
+    if (ws.state.screenplay) ws.state.screenplay.warnings = dynamicWarnings.value;
+  } catch(e) {
+    console.error('Recheck failed:', e);
+  }
+}
+
+function locateScene(w) {
+  if (w.locations && w.locations.length > 0) {
+    locateSceneById(w.locations[0]);
+  }
+}
+
+function locateSceneById(sceneId) {
+  var el = document.getElementById(sceneId);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.style.transition = 'background 0.5s';
+    el.style.background = '#1a2a4a';
+    setTimeout(function() { el.style.background = ''; }, 1500);
+  }
+}
+
+function getFixHint(type) {
+  var hints = {
+    'missing_transition': '在场景前添加"切至"转场',
+    'orphan_character': '将该角色添加到角色表',
+    'inconsistent_location': '统一内外景标记',
+    'character_description_changed': '保留第一处性格描述',
+  };
+  return hints[type] || '自动修复';
+}
+
+function applyFix(w) {
+  if (!props.screenplay) return;
+  var scenes = [];
+  if (props.screenplay.acts) {
+    props.screenplay.acts.forEach(function(act) {
+      if (act.scenes) act.scenes.forEach(function(s) { scenes.push(s); });
+    });
+  }
+
+  if (w.type === 'missing_transition' && w.locations && w.locations.length > 0) {
+    var targetId = w.locations[0];
+    // Find the index of the target scene, then add transition to the END of the PREVIOUS scene
+    var targetIdx = -1;
+    for (var si = 0; si < scenes.length; si++) {
+      if (scenes[si].id === targetId) { targetIdx = si; break; }
+    }
+    if (targetIdx > 0) {
+      var prevScene = scenes[targetIdx - 1];
+      if (!prevScene.content) prevScene.content = [];
+      prevScene.content.push({ type: 'transition', description: '切至' });
+      scheduleSave();
+      doRecheck();
+    }
+  } else if (w.type === 'orphan_character') {
+    // Extract character ID from message
+    var match = w.message.match(/char_\d+/i);
+    if (match && props.screenplay.characters) {
+      var charId = match[0];
+      if (!props.screenplay.characters.find(function(c) { return c.id === charId; })) {
+        props.screenplay.characters.push({ id: charId, name: charId, aliases: [], role: '' });
+        scheduleSave();
+        doRecheck();
+      }
+    }
+  } else if (w.type === 'inconsistent_location' && w.locations && w.locations.length > 0) {
+    // Normalize: set all scenes with this location to the first occurrence's interior value
+    var targetId = w.locations[0];
+    var scene = scenes.find(function(s) { return s.id === targetId; });
+    if (scene && scene.location) {
+      var loc = scene.location;
+      var val = scene.interior;
+      scenes.forEach(function(s) {
+        if (s.location === loc && s.interior !== val) { s.interior = val; }
+      });
+      scheduleSave();
+      doRecheck();
+    }
+  } else if (w.type === 'character_description_changed') {
+    // Just dismiss — the user can handle manually
+    dynamicWarnings.value = (dynamicWarnings.value || props.warnings || []).filter(function(x) { return x !== w; });
+    if (ws.state.screenplay) ws.state.screenplay.warnings = dynamicWarnings.value;
+  }
+}
+
+// Override filteredWarnings to use dynamic warnings
+var oldFiltered2 = computed(() => {
+  if (warnFilter.value === 'all') return props.warnings || [];
+  return (props.warnings || []).filter(w => w.level === warnFilter.value);
+});
 
 function updateMeta(field, value) { if (props.screenplay?.metadata) { props.screenplay.metadata[field] = value; scheduleSave(); } }
 function updateChar(c, field, value) { c[field] = value || null; scheduleSave(); }
@@ -314,7 +423,20 @@ function doMerge() {
   if (!target.personality && source.personality) target.personality = source.personality;
   if (!target.background && source.background) target.background = source.background;
   if (!target.notes && source.notes) target.notes = source.notes;
-  // Remove source
+  // Remap all scene references from source ID to target ID
+  if (props.screenplay.acts) {
+    props.screenplay.acts.forEach(function(act) {
+      if (act.scenes) act.scenes.forEach(function(scene) {
+        if (scene.content) scene.content.forEach(function(block) {
+          if (block.character_id === source.id) {
+            block.character_id = target.id;
+          }
+        });
+      });
+    });
+  }
+
+  // Remove source from character list
   var idx = props.screenplay.characters.indexOf(source);
   if (idx >= 0) props.screenplay.characters.splice(idx, 1);
   mergeSelected.splice(0);
@@ -571,4 +693,10 @@ function toYAML(s) {
 /* ── Delete button ── */
 .btn-char-delete { position: absolute; top: 6px; right: 6px; background: none; border: none; color: #5a5a7a; cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
 .btn-char-delete:hover { background: #3a1a1a; color: #e07070; }
+
+/* ── Warning actions ── */
+.warn-loc-link { color: #7c8cf0; cursor: pointer; text-decoration: underline; margin: 0 4px; }
+.warn-loc-link:hover { color: #a0b4ff; }
+.btn-fix { font-size: 11px; padding: 2px 8px; background: #2a3a2a; color: #7cc87c; border: 1px solid #3a5a3a; border-radius: 4px; cursor: pointer; font-family: inherit; margin-left: 8px; white-space: nowrap; }
+.btn-fix:hover { background: #3a5a3a; }
 </style>
